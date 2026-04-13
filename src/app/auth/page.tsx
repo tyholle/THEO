@@ -77,6 +77,11 @@ export default function AuthPage() {
       setLoading(false)
       return
     }
+    if (username.trim().length > 30) {
+      setError('Username must be 30 characters or fewer.')
+      setLoading(false)
+      return
+    }
     if (!usernamePattern.test(username.trim())) {
       setError('Username can only contain letters, numbers, underscores, and hyphens.')
       setLoading(false)
@@ -98,15 +103,26 @@ export default function AuthPage() {
     })
 
     if (error) {
-      // Map Supabase error messages to user-friendly text.
-      // "User already registered" is Supabase's message for a duplicate email.
-      // All other errors during signup are typically caused by the database
-      // trigger failing (e.g., duplicate username), so we show a username error.
-      if (error.message.toLowerCase().includes('already registered')) {
+      // Supabase AuthErrors have a `code` field for known error types.
+      // `user_already_exists` is the structured code for duplicate email signup.
+      // We also check the message text as a fallback for older SDK versions.
+      const isDuplicateEmail =
+        (error as { code?: string }).code === 'user_already_exists' ||
+        error.message.toLowerCase().includes('already registered')
+
+      // When our database trigger fails (e.g., duplicate username violates the
+      // UNIQUE constraint), Supabase wraps the Postgres error in a generic
+      // "Database error saving new user" message.
+      const isTriggerError = error.message.toLowerCase().includes('database error')
+
+      if (isDuplicateEmail) {
         setError('An account with that email already exists. Try logging in.')
-      } else {
-        // This covers trigger failures like duplicate username.
+      } else if (isTriggerError) {
         setError('That username is already taken. Please choose another.')
+      } else {
+        // Something unexpected happened (network issue, misconfiguration, etc.).
+        // Show a generic message rather than incorrectly blaming the username.
+        setError('Something went wrong. Please try again.')
       }
       setLoading(false)
       return

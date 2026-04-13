@@ -61,8 +61,12 @@ export async function middleware(request: NextRequest) {
   // prematurely on the very next request.
   function redirectWithCookies(destination: string) {
     const redirectResponse = NextResponse.redirect(new URL(destination, request.url))
+    // Pass the full cookie object (not just name + value) so that security
+    // attributes like HttpOnly, Secure, SameSite, and Max-Age are preserved
+    // exactly as Supabase set them. Dropping those attributes could change
+    // how the browser stores or expires the session cookie.
     supabaseResponse.cookies.getAll().forEach(cookie => {
-      redirectResponse.cookies.set(cookie.name, cookie.value)
+      redirectResponse.cookies.set(cookie)
     })
     return redirectResponse
   }
