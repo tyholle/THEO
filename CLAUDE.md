@@ -26,6 +26,7 @@ THEO is a college football pick'em web app where users pick ATS (against the spr
 - **Auth:** Supabase Auth
 - **Chat:** Stream Chat SDK
 - **Email:** Resend
+- **AI:** Anthropic Claude API (email draft generation)
 - **Hosting:** Vercel
 - **Scores:** ESPN unofficial API
 
@@ -34,6 +35,10 @@ THEO is a college football pick'em web app where users pick ATS (against the spr
 - Shared components go in `src/components/`
 - Database helpers go in `src/lib/`
 - Supabase client uses `@supabase/ssr` — never use legacy `@supabase/auth-helpers-nextjs`
+- Admin server actions live in `src/app/admin/actions/` — always call `requireAdmin()` first
+- `src/lib/supabase/admin.ts` — service role client (bypasses RLS); server-only, never import in client components
+- `src/lib/espn.ts` — all ESPN API calls go through here
+- `src/lib/scoring.ts` — ATS calculation and points logic; pure functions, no database calls
 
 ## Key Features
 - ATS picks on 10 games per week
