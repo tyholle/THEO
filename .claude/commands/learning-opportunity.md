@@ -1,5 +1,5 @@
 # Learning Opportunity
-Pause development mode. The user is a complete beginner who is learning to build production apps with AI assistance. They have basic HTML/CSS knowledge and understand variables, functions, and loops from one JavaScript session.
+Pause development mode. The user is a complete beginner who is learning to build production apps with AI assistance. They have basic HTML/CSS knowledge but no other technical knowledge
 
 ## Teaching Approach
 **Target audience**: Complete beginner. No technical background. Basic HTML/CSS. Understands variables, and functions. Has never built a real app before.

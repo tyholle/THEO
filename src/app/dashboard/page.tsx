@@ -7,6 +7,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import LogoutButton from '@/components/LogoutButton'
+import Logo from '@/components/Logo'
 
 export default async function DashboardPage() {
   // Create a server-side Supabase client and fetch the logged-in user.
@@ -19,7 +20,7 @@ export default async function DashboardPage() {
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       {/* Simple top bar */}
       <header className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
-        <h1 className="text-lg font-bold text-green-400">THEO</h1>
+        <Logo />
         {/* LogoutButton is a client component — Next.js handles the mix fine */}
         <LogoutButton />
       </header>
