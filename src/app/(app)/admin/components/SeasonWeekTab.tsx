@@ -250,12 +250,18 @@ export default function SeasonWeekTab({ sports, seasons, weeks }: Props) {
         {/* List of weeks with Mark Complete and Delete buttons */}
         {weeks.length > 0 && (
           <div className="mt-4 space-y-2">
-            {[...weeks].sort((a, b) => a.week_number - b.week_number).map(w => (
+            {[...weeks].sort((a, b) => a.week_number - b.week_number).map(w => {
+              // Look up the season and sport for this week so we can show
+              // which sport it belongs to — important when CFB and NFL both exist
+              const season = seasons.find(s => s.id === w.season_id)
+              const sport  = season ? sports.find(sp => sp.id === season.sport_id) : null
+              const sportTag = sport ? `${sport.slug.toUpperCase()} · ` : ''
+              return (
               <div key={w.id}>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-zinc-300">
                     <span className={`inline-block w-2 h-2 rounded-full mr-2 ${w.is_complete ? 'bg-zinc-600' : 'bg-brand-400'}`} />
-                    {w.label}
+                    <span className="text-zinc-500">{sportTag}</span>{w.label}
                   </span>
                   <div className="flex items-center gap-2">
                     {!w.is_complete ? (
@@ -283,7 +289,8 @@ export default function SeasonWeekTab({ sports, seasons, weeks }: Props) {
                 </div>
                 <Message {...(messages[`delete-week-${w.id}`] ?? {})} />
               </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </Card>

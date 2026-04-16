@@ -83,7 +83,7 @@ export async function middleware(request: NextRequest) {
   // RULE 2: Not logged in + visiting a protected page → send to /auth
   // These are pages that require a login to use.
   // -----------------------------------------------------------------------
-  const protectedRoutes = ['/dashboard', '/picks', '/leaderboard', '/groups', '/admin']
+  const protectedRoutes = ['/dashboard', '/picks', '/leaderboard', '/groups', '/admin', '/rules']
   const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
 
   if (isProtectedRoute && !user) {

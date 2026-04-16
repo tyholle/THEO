@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
+import { DM_Sans } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
+import BottomNav from "@/components/BottomNav";
 
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
-  weight: "100 900",
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  variable: "--font-dm-sans",
+  display: "swap",
 });
+
 const geistMono = localFont({
   src: "./fonts/GeistMonoVF.woff",
   variable: "--font-geist-mono",
@@ -15,7 +18,7 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   title: "THEO",
-  description: "College Football Pick'em",
+  description: "Pick'em Sports — pick winners against the spread.",
 };
 
 export default function RootLayout({
@@ -26,9 +29,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${dmSans.variable} ${geistMono.variable} font-sans antialiased`}
       >
         {children}
+        {/* Bottom navigation — renders on all pages except /auth and /admin.
+            BottomNav checks the current path itself and returns null on those routes. */}
+        <BottomNav />
       </body>
     </html>
   );

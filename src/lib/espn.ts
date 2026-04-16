@@ -9,6 +9,40 @@
 // Two endpoints are used:
 //   1. Scoreboard — all games for a given date
 //   2. Game Summary — one specific game by its ESPN ID
+//
+// MULTI-SPORT: Every function takes a `sportSlug` parameter (e.g. "cfb", "nfl")
+// that is mapped to ESPN's URL path via ESPN_SPORT_PATHS below.
+// To add a new sport, just add its slug → ESPN path entry to that map.
+
+// -----------------------------------------------------------------------
+// ESPN_SPORT_PATHS
+// Maps our short slug (stored in the sports.slug column) to the path
+// segment ESPN uses in their API URLs.
+//
+// To find a new sport's path: open espn.com, go to that sport's scoreboard,
+// and look at the URL — e.g. "espn.com/nfl/scoreboard" → slug is "nfl",
+// and the API path is "football/nfl".
+// -----------------------------------------------------------------------
+export const ESPN_SPORT_PATHS: Record<string, string> = {
+  'cfb':  'football/college-football',
+  'nfl':  'football/nfl',
+  'nba':  'basketball/nba',
+  'mlb':  'baseball/mlb',
+  'nhl':  'hockey/nhl',
+}
+
+// Helper: converts our sport slug to an ESPN URL path segment, or throws
+// a clear error if the slug isn't in the map above.
+export function getEspnPath(sportSlug: string): string {
+  const path = ESPN_SPORT_PATHS[sportSlug.toLowerCase()]
+  if (!path) {
+    throw new Error(
+      `No ESPN path configured for sport slug "${sportSlug}". ` +
+      `Add it to ESPN_SPORT_PATHS in src/lib/espn.ts.`
+    )
+  }
+  return path
+}
 
 // -----------------------------------------------------------------------
 // TypeScript types
@@ -18,10 +52,14 @@
 
 // A single game returned from ESPN (either scoreboard or summary endpoint).
 export type EspnGame = {
-  espnGameId: string      // ESPN's unique ID for this game (e.g. "401628423")
-  homeTeam: string        // Full name, e.g. "Ohio State Buckeyes"
-  awayTeam: string        // Full name, e.g. "Alabama Crimson Tide"
-  kickoffAt: string       // ISO 8601 timestamp, e.g. "2025-09-06T17:00:00Z"
+  espnGameId: string        // ESPN's unique ID for this game (e.g. "401628423")
+  homeTeam: string          // Full name, e.g. "Ohio State Buckeyes"
+  awayTeam: string          // Full name, e.g. "Alabama Crimson Tide"
+  homeShortName: string     // Short display name, e.g. "Ohio State"
+  awayShortName: string     // Short display name, e.g. "Alabama"
+  homeLogoUrl: string | null  // ESPN CDN URL for the home team's logo image
+  awayLogoUrl: string | null  // ESPN CDN URL for the away team's logo image
+  kickoffAt: string         // ISO 8601 timestamp, e.g. "2025-09-06T17:00:00Z"
   homeScore: number | null
   awayScore: number | null
   status: 'scheduled' | 'in_progress' | 'final'
@@ -55,7 +93,13 @@ function mapEspnStatus(typeName: string): EspnGame['status'] {
 // -----------------------------------------------------------------------
 interface EspnCompetitor {
   homeAway: string
-  team: { displayName: string }
+  team: {
+    displayName: string
+    // shortDisplayName is ESPN's condensed name, e.g. "Ohio State" vs "Ohio State Buckeyes"
+    shortDisplayName?: string
+    // logos is an array of image objects; we grab the first one's URL
+    logos?: Array<{ href: string; rel?: string[] }>
+  }
   score: string | number | null | undefined
 }
 
@@ -85,14 +129,27 @@ function parseCompetition(eventId: string, eventDate: string, comp: EspnCompetit
 
   const statusName: string = comp.status?.type?.name ?? 'STATUS_SCHEDULED'
 
+  // ESPN sometimes provides a "dark" logo variant (white logo, good for dark backgrounds).
+  // We prefer it for THEO's dark UI. Fall back to the first logo if no dark variant exists.
+  function pickLogo(logos?: Array<{ href: string; rel?: string[] }>): string | null {
+    if (!logos || logos.length === 0) return null
+    const dark = logos.find(l => l.rel?.includes('dark'))
+    return (dark ?? logos[0]).href
+  }
+
   return {
-    espnGameId: eventId,
-    homeTeam: home.team?.displayName ?? '',
-    awayTeam: away.team?.displayName ?? '',
-    kickoffAt: eventDate,
-    homeScore: home.score != null ? Number(home.score) : null,
-    awayScore: away.score != null ? Number(away.score) : null,
-    status: mapEspnStatus(statusName),
+    espnGameId:    eventId,
+    homeTeam:      home.team?.displayName ?? '',
+    awayTeam:      away.team?.displayName ?? '',
+    // Use shortDisplayName if ESPN provides it; fall back to the full name
+    homeShortName: home.team?.shortDisplayName ?? home.team?.displayName ?? '',
+    awayShortName: away.team?.shortDisplayName ?? away.team?.displayName ?? '',
+    homeLogoUrl:   pickLogo(home.team?.logos),
+    awayLogoUrl:   pickLogo(away.team?.logos),
+    kickoffAt:     eventDate,
+    homeScore:     home.score != null ? Number(home.score) : null,
+    awayScore:     away.score != null ? Number(away.score) : null,
+    status:        mapEspnStatus(statusName),
   }
 }
 
@@ -103,9 +160,9 @@ function parseCompetition(eventId: string, eventDate: string, comp: EspnCompetit
 //
 // The date parameter must be in YYYYMMDD format (e.g. "20250906").
 // -----------------------------------------------------------------------
-export async function fetchScoresByDate(date: string): Promise<EspnGame[]> {
-  const url =
-    `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${date}`
+export async function fetchScoresByDate(date: string, sportSlug: string): Promise<EspnGame[]> {
+  const sportPath = getEspnPath(sportSlug)
+  const url = `https://site.api.espn.com/apis/site/v2/sports/${sportPath}/scoreboard?dates=${date}`
 
   try {
     const res = await fetch(url, {
@@ -114,7 +171,7 @@ export async function fetchScoresByDate(date: string): Promise<EspnGame[]> {
     })
 
     if (!res.ok) {
-      console.error(`ESPN scoreboard fetch failed for date ${date}: ${res.status}`)
+      console.error(`ESPN scoreboard fetch failed for ${sportSlug} on ${date}: ${res.status}`)
       return []
     }
 
@@ -142,9 +199,9 @@ export async function fetchScoresByDate(date: string): Promise<EspnGame[]> {
 // Used as a fallback when a game doesn't appear in the scoreboard results.
 // Also used when admin types an ESPN game ID to auto-fill the add game form.
 // -----------------------------------------------------------------------
-export async function fetchGameById(espnGameId: string): Promise<EspnGame | null> {
-  const url =
-    `https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=${espnGameId}`
+export async function fetchGameById(espnGameId: string, sportSlug: string): Promise<EspnGame | null> {
+  const sportPath = getEspnPath(sportSlug)
+  const url = `https://site.api.espn.com/apis/site/v2/sports/${sportPath}/summary?event=${espnGameId}`
 
   try {
     const res = await fetch(url, {
@@ -152,7 +209,7 @@ export async function fetchGameById(espnGameId: string): Promise<EspnGame | null
     })
 
     if (!res.ok) {
-      console.error(`ESPN game summary fetch failed for ID ${espnGameId}: ${res.status}`)
+      console.error(`ESPN game summary fetch failed for ${sportSlug} game ${espnGameId}: ${res.status}`)
       return null
     }
 

@@ -12,7 +12,6 @@
 // fresh data and pass it back down through this component.
 
 import { useState } from 'react'
-import Logo from '@/components/Logo'
 import SeasonWeekTab from './SeasonWeekTab'
 import GameTab from './GameTab'
 import ScoresTab from './ScoresTab'
@@ -63,18 +62,7 @@ export default function AdminShell(props: Props) {
   const [activeTab, setActiveTab] = useState<TabId>('season')
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
-
-      {/* ---- Top bar ---- */}
-      <header className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Logo />
-          <span className="text-xs text-zinc-500 border-l border-zinc-700 pl-3">Admin Panel</span>
-        </div>
-        <a href="/dashboard" className="text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
-          ← Back to Dashboard
-        </a>
-      </header>
+    <div className="min-h-0">
 
       {/* ---- Tab navigation bar ---- */}
       <nav className="border-b border-zinc-800 px-6">
@@ -106,6 +94,8 @@ export default function AdminShell(props: Props) {
         )}
         {activeTab === 'games' && (
           <GameTab
+            sports={props.sports}
+            seasons={props.seasons}
             weeks={props.weeks}
             currentWeekGames={props.currentWeekGames}
             currentWeekId={props.currentWeekId}

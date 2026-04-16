@@ -10,9 +10,11 @@
 
 import { useState, useTransition } from 'react'
 import { lookupEspnGame, createGame, updateGame, deleteGame, voidGame } from '../actions/game'
-import type { Week, Game } from './AdminShell'
+import type { Sport, Season, Week, Game } from './AdminShell'
 
 type Props = {
+  sports: Sport[]
+  seasons: Season[]
   weeks: Week[]
   currentWeekGames: Game[]
   currentWeekId: string | null
@@ -123,8 +125,14 @@ function EditGameRow({
 // -----------------------------------------------------------------------
 // Main component
 // -----------------------------------------------------------------------
-export default function GameTab({ weeks, currentWeekGames, currentWeekId }: Props) {
+export default function GameTab({ sports, seasons, weeks, currentWeekGames, currentWeekId }: Props) {
   const [isPending, startTransition] = useTransition()
+
+  // Which sport the admin has selected for the ESPN lookup.
+  // Defaults to the first sport's slug (usually 'cfb'), or '' if no sports exist.
+  const [selectedSportSlug, setSelectedSportSlug] = useState<string>(
+    sports[0]?.slug ?? ''
+  )
 
   // ESPN auto-fill state
   const [espnId, setEspnId]       = useState('')
@@ -142,11 +150,12 @@ export default function GameTab({ weeks, currentWeekGames, currentWeekId }: Prop
 
   // ---- ESPN lookup ----
   function handleLookup() {
-    if (!espnId.trim()) return
+    if (!espnId.trim() || !selectedSportSlug) return
     setLookupError(null)
     setAutoFilled(null)
     startTransition(async () => {
-      const result = await lookupEspnGame(espnId.trim())
+      // Pass the selected sport slug so the server knows which ESPN endpoint to call
+      const result = await lookupEspnGame(espnId.trim(), selectedSportSlug)
       if ('error' in result && result.error) {
         setLookupError(result.error)
       } else if ('success' in result) {
@@ -216,12 +225,34 @@ export default function GameTab({ weeks, currentWeekGames, currentWeekId }: Prop
       <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
         <h3 className="text-sm font-semibold text-zinc-300 mb-4">Add Game</h3>
 
-        {/* Step 1: ESPN ID lookup */}
+        {/* Step 1: Select sport + ESPN ID lookup */}
         <div className="mb-4 p-4 bg-zinc-800/60 rounded-lg border border-zinc-700">
-          <p className="text-xs text-zinc-400 mb-2">
-            Step 1: Enter the ESPN Game ID to auto-fill team names and kickoff time.
-            Find it in the ESPN game URL (the number after &quot;gameId=&quot; or at the end of the URL).
+          <p className="text-xs text-zinc-400 mb-3">
+            Step 1: Select the sport, then enter the ESPN Game ID to auto-fill team names and kickoff time.
+            Find the ID in the ESPN game URL (the number at the end).
           </p>
+
+          {/* Sport selector — determines which ESPN API URL to call */}
+          <div className="mb-3">
+            <label className="block text-xs text-zinc-400 mb-1">Sport</label>
+            <select
+              value={selectedSportSlug}
+              onChange={e => {
+                setSelectedSportSlug(e.target.value)
+                // Clear auto-fill when sport changes — old result was for a different sport
+                setAutoFilled(null)
+                setLookupError(null)
+              }}
+              className="w-full rounded-lg bg-zinc-700 border border-zinc-600 px-3 py-2
+                         text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              <option value="">— Select sport —</option>
+              {sports.map(s => (
+                <option key={s.id} value={s.slug}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="flex gap-2">
             <input
               value={espnId}
@@ -233,7 +264,7 @@ export default function GameTab({ weeks, currentWeekGames, currentWeekId }: Prop
             />
             <button
               onClick={handleLookup}
-              disabled={isPending || !espnId.trim()}
+              disabled={isPending || !espnId.trim() || !selectedSportSlug}
               className="px-4 py-2 rounded-lg bg-zinc-600 text-zinc-100 text-sm font-medium
                          hover:bg-zinc-500 disabled:opacity-50"
             >
@@ -251,11 +282,13 @@ export default function GameTab({ weeks, currentWeekGames, currentWeekId }: Prop
         {/* Step 2: Full game form — only shows after a successful ESPN lookup */}
         {autoFilled && (
           <form action={handleAddGame} className="space-y-3">
-            {/* Hidden fields from ESPN auto-fill */}
+            {/* Hidden fields from ESPN auto-fill and sport selection */}
             <input type="hidden" name="home_team" value={autoFilled.homeTeam} />
             <input type="hidden" name="away_team" value={autoFilled.awayTeam} />
             <input type="hidden" name="kickoff_at" value={autoFilled.kickoffAt} />
             <input type="hidden" name="espn_game_id" value={espnId} />
+            {/* sport_slug tells the server which ESPN API URL to use when saving logos */}
+            <input type="hidden" name="sport_slug" value={selectedSportSlug} />
 
             <div>
               <label className="block text-xs font-medium text-zinc-400 mb-1">Week</label>
@@ -263,9 +296,16 @@ export default function GameTab({ weeks, currentWeekGames, currentWeekId }: Prop
                 className="w-full rounded-lg bg-zinc-800 border border-zinc-700 px-3 py-2
                            text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500">
                 <option value="">— Select week —</option>
-                {weeks.map(w => (
-                  <option key={w.id} value={w.id}>{w.label}</option>
-                ))}
+                {weeks.map(w => {
+                  // Show the season name alongside the week label so it's clear
+                  // which sport this week belongs to, e.g. "2025 CFB Season — Week 1"
+                  const season = seasons.find(s => s.id === w.season_id)
+                  const sport  = season ? sports.find(sp => sp.id === season.sport_id) : null
+                  const label  = sport ? `${sport.slug.toUpperCase()} · ${w.label}` : w.label
+                  return (
+                    <option key={w.id} value={w.id}>{label}</option>
+                  )
+                })}
               </select>
             </div>
 

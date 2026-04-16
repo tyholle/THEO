@@ -7,7 +7,7 @@
 // Login shows first. "Create an Account" switches to signup.
 // "Already have an account?" switches back.
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
@@ -15,8 +15,10 @@ import Image from 'next/image'
 type Mode = 'login' | 'signup'
 
 export default function AuthPage() {
-  const router  = useRouter()
-  const supabase = createClient()
+  const router   = useRouter()
+  // useMemo ensures one client instance for the lifetime of this component,
+  // instead of creating a new one on every keystroke
+  const supabase = useMemo(() => createClient(), [])
 
   const [mode, setMode]         = useState<Mode>('login')
   const [email, setEmail]       = useState('')

@@ -76,22 +76,33 @@ export default async function AdminPage() {
     })(),
   ])
 
-  // ---- Determine the current week ----
-  // "Current week" = lowest week_number that isn't complete, in the active season
-  const activeSeason = seasons?.find(s => s.is_active) ?? null
+  // ---- Determine all non-complete weeks for ALL active seasons ----
+  // When multiple sports are active (e.g. CFB + MLB), we want to show
+  // games from every non-complete week across all sports.
+  //
+  // Previously this only picked the FIRST non-complete week per season,
+  // which meant games in Week 2, 3, etc. would never appear in the admin
+  // panel or get refreshed from ESPN — even if Week 1 was long finished.
+  const activeSeasonsList = seasons?.filter(s => s.is_active) ?? []
 
-  const currentWeek = weeks
-    ?.filter(w => activeSeason && w.season_id === activeSeason.id && !w.is_complete)
-    .sort((a, b) => a.week_number - b.week_number)[0] ?? null
+  // Collect ALL non-complete week IDs across all active seasons
+  const allNonCompleteWeeks = activeSeasonsList.flatMap(season =>
+    (weeks ?? []).filter(w => w.season_id === season.id && !w.is_complete)
+  )
+  const currentWeekIds = allNonCompleteWeeks.map(w => w.id)
 
-  // ---- Fetch games for the current week ----
-  const { data: currentWeekGames } = currentWeek
+  // ---- Fetch games for all non-complete weeks ----
+  const { data: currentWeekGames } = currentWeekIds.length > 0
     ? await supabase
         .from('games')
         .select('*')
-        .eq('week_id', currentWeek.id)
+        .in('week_id', currentWeekIds)
         .order('kickoff_at')
     : { data: [] }
+
+  // For the "Add Game" week selector default, use the earliest non-complete week
+  const currentWeek = allNonCompleteWeeks
+    .sort((a, b) => a.week_number - b.week_number)[0] ?? null
 
   // ---- Build admin user list (join auth.users with profiles) ----
   // auth.users has the email; profiles has the username and is_admin

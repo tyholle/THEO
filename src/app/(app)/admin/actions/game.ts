@@ -23,23 +23,29 @@ function isLocked(kickoffAt: string): boolean {
 
 // -----------------------------------------------------------------------
 // lookupEspnGame
-// Given an ESPN game ID, fetches and returns the home team, away team,
-// and kickoff time. Used to auto-fill the "Add Game" form.
+// Given an ESPN game ID and sport slug, fetches and returns the home team,
+// away team, kickoff time, short names, and logo URLs.
+// Used to auto-fill the "Add Game" form in the admin panel.
 // -----------------------------------------------------------------------
-export async function lookupEspnGame(espnGameId: string) {
+export async function lookupEspnGame(espnGameId: string, sportSlug: string) {
   try {
     await requireAdmin()
 
-    const game = await fetchGameById(espnGameId.trim())
+    const game = await fetchGameById(espnGameId.trim(), sportSlug)
     if (!game) {
       return { error: 'Game not found. Double-check the ESPN game ID.' }
     }
 
     return {
       success: true,
-      homeTeam: game.homeTeam,
-      awayTeam: game.awayTeam,
-      kickoffAt: game.kickoffAt,
+      homeTeam:      game.homeTeam,
+      awayTeam:      game.awayTeam,
+      kickoffAt:     game.kickoffAt,
+      // New fields — passed back so they can be stored when game is created
+      homeShortName: game.homeShortName,
+      awayShortName: game.awayShortName,
+      homeLogoUrl:   game.homeLogoUrl,
+      awayLogoUrl:   game.awayLogoUrl,
     }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Unknown error' }
@@ -62,6 +68,9 @@ export async function createGame(formData: FormData) {
     const point_value  = Number(formData.get('point_value'))
     const kickoff_at   = String(formData.get('kickoff_at') ?? '').trim()
     const espn_game_id = String(formData.get('espn_game_id') ?? '').trim() || null
+    // sport_slug is passed as a hidden field from the GameTab form so we know
+    // which ESPN API URL to call (e.g. "nfl" → football/nfl)
+    const sport_slug   = String(formData.get('sport_slug') ?? 'cfb').trim()
 
     // Validate required fields
     if (!week_id || !home_team || !away_team || !kickoff_at) {
@@ -78,6 +87,29 @@ export async function createGame(formData: FormData) {
       return { error: 'Spread must be a negative number (e.g. -7.5).' }
     }
 
+    // If an ESPN game ID was provided, fetch team logos and short names now.
+    // We do this silently — if ESPN is unavailable, the game still gets created,
+    // just without logos (the picks page handles null gracefully).
+    let home_short_name: string | null = null
+    let away_short_name: string | null = null
+    let home_logo_url:   string | null = null
+    let away_logo_url:   string | null = null
+
+    if (espn_game_id) {
+      try {
+        const espnData = await fetchGameById(espn_game_id, sport_slug)
+        if (espnData) {
+          home_short_name = espnData.homeShortName
+          away_short_name = espnData.awayShortName
+          home_logo_url   = espnData.homeLogoUrl
+          away_logo_url   = espnData.awayLogoUrl
+        }
+      } catch {
+        // ESPN lookup failed — game still saves, just without logo/short name
+        console.warn('ESPN lookup failed during createGame; logos will be null')
+      }
+    }
+
     const { error } = await supabase.from('games').insert({
       week_id,
       home_team,
@@ -87,6 +119,10 @@ export async function createGame(formData: FormData) {
       point_value,
       kickoff_at,
       espn_game_id,
+      home_short_name,
+      away_short_name,
+      home_logo_url,
+      away_logo_url,
     })
 
     if (error) return { error: error.message }
@@ -107,10 +143,13 @@ export async function updateGame(gameId: string, formData: FormData) {
   try {
     const { supabase } = await requireAdmin()
 
-    // Fetch the current game to check kickoff time before allowing the edit
+    // Fetch the current game along with its week → season → sport chain.
+    // We need the sport slug so we can call the right ESPN API URL when
+    // re-fetching logos during an edit. Supabase lets us follow foreign
+    // keys using dot notation in the select string.
     const { data: game, error: fetchError } = await supabase
       .from('games')
-      .select('kickoff_at')
+      .select('kickoff_at, weeks(seasons(sports(slug)))')
       .eq('id', gameId)
       .single()
 
@@ -137,9 +176,45 @@ export async function updateGame(gameId: string, formData: FormData) {
       return { error: 'Spread must be a negative number (e.g. -7.5).' }
     }
 
+    // If an ESPN game ID is provided, re-fetch logos and short names so they
+    // stay in sync if the admin corrects the ESPN ID on an existing game.
+    // IMPORTANT: only include logo/name columns in the update if the ESPN
+    // lookup actually returned data. If we always include them (even as null),
+    // every admin edit would erase logos that were previously saved.
+    let espnFields: {
+      home_short_name?: string | null
+      away_short_name?: string | null
+      home_logo_url?: string | null
+      away_logo_url?: string | null
+    } = {}
+
+    if (espn_game_id) {
+      try {
+        // Derive the sport slug by following game → week → season → sport.
+        // TypeScript doesn't know the nested shape from supabase's inference,
+        // so we cast to `any` just for this one deeply-nested read.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sportSlug: string = (game as any)?.weeks?.seasons?.sports?.slug ?? 'cfb'
+        const espnData = await fetchGameById(espn_game_id, sportSlug)
+        if (espnData) {
+          espnFields = {
+            home_short_name: espnData.homeShortName,
+            away_short_name: espnData.awayShortName,
+            home_logo_url:   espnData.homeLogoUrl,
+            away_logo_url:   espnData.awayLogoUrl,
+          }
+        }
+      } catch {
+        console.warn('ESPN lookup failed during updateGame; existing logos preserved')
+      }
+    }
+
     const { error } = await supabase
       .from('games')
-      .update({ home_team, away_team, spread, spread_favors, point_value, kickoff_at, espn_game_id })
+      .update({
+        home_team, away_team, spread, spread_favors, point_value, kickoff_at, espn_game_id,
+        ...espnFields, // Only overrides logo columns if ESPN lookup succeeded
+      })
       .eq('id', gameId)
 
     if (error) return { error: error.message }
