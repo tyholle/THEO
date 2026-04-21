@@ -33,7 +33,7 @@ export default function RulesPage() {
         <RuleSection
           number="02"
           title="The Spread Explained"
-          body="If Alabama is −7.5 and you pick them, Alabama needs to win by 8 or more points for your pick to be correct. If you pick the underdog at +7.5, they just need to lose by fewer than 8 (or win outright) for you to be right."
+          body="If Indiana is −7.5 and you pick them, Indiana needs to win by 8 or more points for your pick to be correct. If you pick the underdog at +7.5, they just need to lose by fewer than 8 (or win outright) for you to be right."
         />
         <RuleSection
           number="03"

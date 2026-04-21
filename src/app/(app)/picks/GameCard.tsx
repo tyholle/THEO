@@ -94,8 +94,8 @@ function TeamLogo({
   size?: 'sm' | 'md'
 }) {
   const containerClass = size === 'sm'
-    ? 'w-7 h-7 rounded-full bg-zinc-700/80 flex items-center justify-center overflow-hidden flex-shrink-0 p-0.5'
-    : 'w-8 h-8 rounded-full bg-zinc-700/80 flex items-center justify-center overflow-hidden flex-shrink-0 p-0.5'
+    ? 'w-7 h-7 flex items-center justify-center flex-shrink-0 p-0.5'
+    : 'w-8 h-8 flex items-center justify-center flex-shrink-0 p-0.5'
 
   const textClass = size === 'sm' ? 'text-[9px] font-black text-zinc-200' : 'text-[10px] font-black text-zinc-200'
 
@@ -294,33 +294,35 @@ function LockedPickRow({
   // Same gradient logic as TeamButton — outcome determines the color
   let bgClass: string
   if (outcome === 'win') {
-    bgClass = 'bg-gradient-to-r from-zinc-900 via-emerald-900/60 to-emerald-700/50'
+    bgClass = 'bg-gradient-to-b from-emerald-700/50 via-emerald-900/60 to-zinc-900'
   } else if (outcome === 'loss') {
-    bgClass = 'bg-gradient-to-r from-zinc-900 via-red-900/60 to-red-700/50'
+    bgClass = 'bg-gradient-to-b from-red-700/50 via-red-900/60 to-zinc-900'
   } else {
     // Active pick (game not yet scored) — brand purple
-    bgClass = 'bg-gradient-to-r from-zinc-900 via-brand-900 to-brand-600'
+    bgClass = 'bg-gradient-to-b from-brand-600 via-brand-900 to-zinc-900'
   }
 
   return (
-    <div className={`mx-4 mb-3 flex items-center gap-3 rounded-xl py-4 px-4 ${bgClass}`}>
+    <div className={`mx-4 mb-3 relative flex items-center justify-center gap-3 rounded-xl py-4 px-4 ${bgClass}`}>
       {/* Team logo */}
       <TeamLogo logoUrl={logoUrl} shortName={shortName} size="md" />
 
-      {/* Team name and spread — takes up remaining space */}
-      <div className="flex flex-col items-start min-w-0 flex-1">
+      {/* Team name and spread */}
+      <div className="flex flex-col items-start min-w-0">
         <span className="text-white font-bold text-sm leading-tight">{shortName}</span>
         <span className="text-zinc-400 text-xs font-medium leading-tight">{spread}</span>
       </div>
 
       {/* Double-down icon — only shown if the user doubled down on this game */}
       {isDoubleDown && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/graphics/doubledown.svg`}
-          alt="Double down"
-          className="w-5 h-5 flex-shrink-0 opacity-90"
-        />
+        <div className="absolute right-4 top-1/2 -translate-y-1/2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/graphics/doubledown.svg"
+            alt="Double down"
+            className="w-5 h-5 flex-shrink-0 opacity-90"
+          />
+        </div>
       )}
     </div>
   )

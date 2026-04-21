@@ -16,6 +16,8 @@ All notable changes to THEO are documented here.
 - **Pending state on team buttons** — tapping a team briefly grays out both buttons while the save is in flight, preventing double-taps
 
 ### Fixed
+- **Picks not appearing after re-login (caching)** — after logging out and back in, the picks page sometimes showed a blank slate even though all picks were saved in the database; fixed by telling the server never to cache the picks query, and by making the page re-sync its local state whenever the server sends fresh data
+- **Games now sorted by point value (highest first)** — the picks page now lists the 10-point game at the top and the 1-point game at the bottom, so the most important matchup is always front and center
 - **League name edit pre-fills current name** — the edit form now opens with the existing league name already filled in instead of a blank field
 - **Hub rank now handles ties correctly** — two members with the same total points share the same rank number on the leagues hub, matching how the detail page leaderboard already worked
 - **Infinite recursion in league membership policies** — the database policies that check "is this user in this group?" were querying themselves in a loop; fixed by adding a helper database function (`get_my_group_ids`) that reads memberships directly without triggering the same policy check
@@ -29,6 +31,7 @@ All notable changes to THEO are documented here.
 - **Cron job used console.log instead of console.info** — minor log-level fix on the success message in the cron route
 
 ### Changed
+- **Admin point value is now a dropdown** — when adding or editing a game, the point value field shows a dropdown (1–10) instead of a free-text number input; values already assigned to other games in the same week are hidden so the admin can only pick from what's available; the server also blocks duplicates as a safety net
 - **Post-login redirect goes to picks** — after signing in, users land directly on the picks page; the separate dashboard page has been removed as it was redundant
 - **Locked game pick display** — after a matchup locks, the card now shows the team you picked (logo, short name, spread) in a clear full-width row, instead of grayed-out buttons that made it unclear whether you had picked or not
 - **Lock bar position** — the "Matchup has locked" bar now appears below the picked team row instead of above it

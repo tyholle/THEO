@@ -53,8 +53,8 @@ export function getEspnPath(sportSlug: string): string {
 // A single game returned from ESPN (either scoreboard or summary endpoint).
 export type EspnGame = {
   espnGameId: string        // ESPN's unique ID for this game (e.g. "401628423")
-  homeTeam: string          // Full name, e.g. "Ohio State Buckeyes"
-  awayTeam: string          // Full name, e.g. "Alabama Crimson Tide"
+  homeTeam: string          // Short name, e.g. "Ohio State"
+  awayTeam: string          // Short name, e.g. "Alabama"
   homeShortName: string     // Short display name, e.g. "Ohio State"
   awayShortName: string     // Short display name, e.g. "Alabama"
   homeLogoUrl: string | null  // ESPN CDN URL for the home team's logo image
@@ -139,8 +139,8 @@ function parseCompetition(eventId: string, eventDate: string, comp: EspnCompetit
 
   return {
     espnGameId:    eventId,
-    homeTeam:      home.team?.displayName ?? '',
-    awayTeam:      away.team?.displayName ?? '',
+    homeTeam:      home.team?.shortDisplayName ?? home.team?.displayName ?? '',
+    awayTeam:      away.team?.shortDisplayName ?? away.team?.displayName ?? '',
     // Use shortDisplayName if ESPN provides it; fall back to the full name
     homeShortName: home.team?.shortDisplayName ?? home.team?.displayName ?? '',
     awayShortName: away.team?.shortDisplayName ?? away.team?.displayName ?? '',
