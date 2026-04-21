@@ -63,7 +63,10 @@ export default function LeaderboardClient({ sports, views, currentUserId }: Prop
       copy.sort((a, b) => b.accuracy - a.accuracy || b.totalPoints - a.totalPoints)
 
       // Re-assign rank numbers based on the new accuracy order.
-      // Ties in accuracy share the same rank number.
+      // Ties in accuracy share the same rank number — rank only increments when
+      // accuracy drops, not when the points tiebreaker changes position. This is
+      // standard sports ranking behavior: the secondary sort affects *position* in
+      // the list but not the displayed rank *number*.
       let rank = 1
       return copy.map((row, i) => {
         if (i > 0 && row.accuracy < copy[i - 1].accuracy) rank = i + 1
