@@ -292,11 +292,16 @@ export default function PicksClient({
           ...prev,
           [previousDD.game_id]: { ...previousDD, is_double_down: true },
         }))
-        // Restore it in the database too
-        await supabase
+        // Restore it in the database too.
+        // If this rollback also fails, the UI and DB are out of sync — tell the
+        // user to refresh rather than silently leaving them in a broken state.
+        const { error: rollbackError } = await supabase
           .from('picks')
           .update({ is_double_down: true })
           .eq('id', previousDD.id)
+        if (rollbackError) {
+          setSaveError('Double down is out of sync — please refresh the page.')
+        }
       }
     }
   }

@@ -130,7 +130,7 @@ export default async function LeagueDetailPage({
 
   const members: LeagueMember[] = (rawMembers ?? []).map(m => ({
     userId:   m.user_id,
-    username: (m.profiles as { username: string } | null)?.username ?? 'Unknown',
+    username: (m.profiles as unknown as { username: string } | null)?.username ?? 'Unknown',
     role:     m.role as 'owner' | 'member',
     joinedAt: m.joined_at,
   }))

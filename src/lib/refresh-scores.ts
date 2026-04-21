@@ -170,9 +170,78 @@ export async function runRefreshScores(supabase: SupabaseClient) {
     }
   }
 
+  // -----------------------------------------------------------------------
+  // Recovery pass: re-score any game already marked "final" that still has
+  // picks with points_earned = null.
+  //
+  // This handles the case where a previous refresh run was interrupted
+  // mid-way (e.g. server crash, timeout) after the game row was set to
+  // "final" but before all pick rows were updated with points_earned.
+  // Without this pass, those picks would stay at null forever because the
+  // main loop skips games already marked "final" (line 131 above).
+  //
+  // We run this after the main loop so it acts as a safety net — it only
+  // fires if something actually went wrong in a prior run.
+  // -----------------------------------------------------------------------
+  let recoveredCount = 0
+
+  for (const season of activeSeasons) {
+    // Find all weeks in this season
+    const { data: allWeeks } = await supabase
+      .from('weeks')
+      .select('id')
+      .eq('season_id', season.id)
+
+    if (!allWeeks || allWeeks.length === 0) continue
+    const allWeekIds = allWeeks.map(w => w.id)
+
+    // Find final games in this season that have at least one un-scored pick
+    const { data: finalGames } = await supabase
+      .from('games')
+      .select('id, spread, spread_favors, point_value, home_score, away_score')
+      .in('week_id', allWeekIds)
+      .eq('status', 'final')
+      .not('home_score', 'is', null)
+      .not('away_score', 'is', null)
+
+    if (!finalGames || finalGames.length === 0) continue
+
+    for (const game of finalGames) {
+      // Check if any pick for this game is still un-scored
+      const { data: unscoredPicks } = await supabase
+        .from('picks')
+        .select('id')
+        .eq('game_id', game.id)
+        .is('points_earned', null)
+        .limit(1)
+
+      if (!unscoredPicks || unscoredPicks.length === 0) continue
+
+      // At least one pick is missing — re-run scoreGame for the whole game.
+      // scoreGame is safe to run multiple times: it overwrites points_earned
+      // with the correct value, so already-scored picks get the same value again.
+      try {
+        await scoreGame(
+          supabase,
+          game.id,
+          game.home_score!,
+          game.away_score!,
+          game.spread,
+          game.spread_favors,
+          game.point_value
+        )
+        recoveredCount++
+      } catch (recoverErr) {
+        console.error(`Recovery scoring failed for game ${game.id}:`, recoverErr)
+        failedGameIds.push(game.id)
+      }
+    }
+  }
+
   const failedCount = failedGameIds.length
-  const failureNote = failedCount > 0 ? ` ${failedCount} game(s) failed.` : ''
-  const message     = `Updated ${updatedCount} game(s). Scored ${scoredCount} final game(s).${failureNote}`
+  const failureNote   = failedCount    > 0 ? ` ${failedCount} game(s) failed.`     : ''
+  const recoveryNote  = recoveredCount > 0 ? ` Recovered ${recoveredCount} game(s).` : ''
+  const message       = `Updated ${updatedCount} game(s). Scored ${scoredCount} final game(s).${recoveryNote}${failureNote}`
 
   return { updatedCount, scoredCount, failedCount, message }
 }

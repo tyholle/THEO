@@ -153,7 +153,7 @@ export default async function PicksPage({
   // ---- Fetch games for the selected week ----
   const { data: games, error: gamesError } = await supabase
     .from('games')
-    .select('*')
+    .select('id, week_id, home_team, away_team, home_short_name, away_short_name, home_logo_url, away_logo_url, spread, spread_favors, point_value, kickoff_at, home_score, away_score, status, ats_result')
     .eq('week_id', selectedWeek.id)
     .order('kickoff_at', { ascending: true })
 

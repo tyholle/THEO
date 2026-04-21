@@ -317,7 +317,7 @@ function LockedPickRow({
       {isDoubleDown && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src="https://ynlmvzuedasovzaesjeq.supabase.co/storage/v1/object/public/graphics/doubledown.svg"
+          src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/graphics/doubledown.svg`}
           alt="Double down"
           className="w-5 h-5 flex-shrink-0 opacity-90"
         />

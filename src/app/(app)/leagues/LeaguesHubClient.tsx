@@ -82,7 +82,7 @@ export default function LeaguesHubClient({ leagues, activeSports }: Props) {
       const formData = new FormData(e.currentTarget)
       const result = await createLeague(formData)
       if ('error' in result) {
-        setCreateError(result.error)
+        setCreateError(result.error ?? 'Unknown error')
       } else {
         // Bust client-side router cache before leaving this page.
         router.refresh()
@@ -121,7 +121,7 @@ export default function LeaguesHubClient({ leagues, activeSports }: Props) {
     startTransition(async () => {
       const result = await joinLeague(joinCode)
       if ('error' in result) {
-        setJoinError(result.error)
+        setJoinError(result.error ?? 'Unknown error')
         setPanel('join-enter')  // send them back to re-enter code
       } else {
         // Bust client-side router cache before leaving this page.

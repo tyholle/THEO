@@ -76,7 +76,7 @@ export default async function LeaguesPage() {
   const groups = rawGroups ?? []
 
   // ---- Step 2b: Load sport names separately ----
-  const sportIds = [...new Set(groups.map(g => g.sport_id).filter((id): id is string => id !== null))]
+  const sportIds = Array.from(new Set(groups.map(g => g.sport_id).filter((id): id is string => id !== null)))
   const { data: rawSports } = sportIds.length > 0
     ? await supabase.from('sports').select('id, name').in('id', sportIds)
     : { data: [] }
@@ -108,9 +108,9 @@ export default async function LeaguesPage() {
   // We batch by unique sport to avoid redundant queries.
 
   // Collect all unique sport IDs across the user's leagues
-  const uniqueSportIds = [
-    ...new Set(groups.map(g => g.sport_id).filter((id): id is string => id !== null))
-  ]
+  const uniqueSportIds = Array.from(
+    new Set(groups.map(g => g.sport_id).filter((id): id is string => id !== null))
+  )
 
   // For each sport, find its active season ID
   const seasonBySport: Record<string, string> = {}

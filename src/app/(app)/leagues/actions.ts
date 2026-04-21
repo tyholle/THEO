@@ -99,7 +99,6 @@ export async function createLeague(formData: FormData) {
     // By pre-generating the ID we never need to read the row back,
     // which sidesteps the issue entirely.
     let groupId = ''
-    let join_code = ''
 
     for (let attempt = 0; attempt < 5; attempt++) {
       const candidateId   = crypto.randomUUID()
@@ -110,8 +109,7 @@ export async function createLeague(formData: FormData) {
         .insert({ id: candidateId, name, sport_id, join_code: candidateCode, created_by: userId, max_members: 50 })
 
       if (!groupError) {
-        groupId   = candidateId
-        join_code = candidateCode
+        groupId = candidateId
         break
       }
 
