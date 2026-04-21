@@ -34,7 +34,7 @@ export default async function AdminPage() {
     .eq('id', user.id)
     .single()
 
-  if (!selfProfile?.is_admin) redirect('/dashboard')
+  if (!selfProfile?.is_admin) redirect('/picks')
 
   // ---- 2. Fetch all data in parallel ----
   // Promise.all runs all these database queries at the same time instead

@@ -22,10 +22,10 @@ export default function AppHeader() {
       </div>
       {isAdmin ? (
         <Link
-          href="/dashboard"
+          href="/picks"
           className="text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
         >
-          ← Back to Dashboard
+          ← Back to App
         </Link>
       ) : (
         <LogoutButton />

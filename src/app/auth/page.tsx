@@ -48,7 +48,7 @@ export default function AuthPage() {
     }
 
     router.refresh()
-    router.push('/dashboard')
+    router.push('/picks')
   }
 
   // ---- Sign up ----
@@ -98,7 +98,7 @@ export default function AuthPage() {
     }
 
     router.refresh()
-    router.push('/dashboard')
+    router.push('/picks')
   }
 
   // -----------------------------------------------------------------------

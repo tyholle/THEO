@@ -72,18 +72,18 @@ export async function middleware(request: NextRequest) {
   }
 
   // -----------------------------------------------------------------------
-  // RULE 1: Already logged in + visiting /auth → send to /dashboard
+  // RULE 1: Already logged in + visiting /auth → send to /picks
   // There's no reason for a logged-in user to see the login page.
   // -----------------------------------------------------------------------
   if (user && pathname === '/auth') {
-    return redirectWithCookies('/dashboard')
+    return redirectWithCookies('/picks')
   }
 
   // -----------------------------------------------------------------------
   // RULE 2: Not logged in + visiting a protected page → send to /auth
   // These are pages that require a login to use.
   // -----------------------------------------------------------------------
-  const protectedRoutes = ['/dashboard', '/picks', '/leaderboard', '/leagues', '/admin', '/rules']
+  const protectedRoutes = ['/picks', '/leaderboard', '/leagues', '/admin', '/rules']
   const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
 
   if (isProtectedRoute && !user) {
@@ -91,7 +91,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // -----------------------------------------------------------------------
-  // RULE 3: Logged in + visiting /admin + NOT an admin → send to /dashboard
+  // RULE 3: Logged in + visiting /admin + NOT an admin → send to /picks
   // We only run this extra database check if the user is actually logged in
   // and trying to reach /admin (to avoid extra DB calls on every request).
   // -----------------------------------------------------------------------
@@ -103,7 +103,7 @@ export async function middleware(request: NextRequest) {
       .single()
 
     if (!profile?.is_admin) {
-      return redirectWithCookies('/dashboard')
+      return redirectWithCookies('/picks')
     }
   }
 
