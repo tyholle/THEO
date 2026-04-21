@@ -80,7 +80,7 @@ function IconRules({ active }: { active: boolean }) {
 // -----------------------------------------------------------------------
 const TABS = [
   { label: 'Games',        href: '/picks',        Icon: IconGames },
-  { label: 'Leagues',      href: '/groups',       Icon: IconLeagues },
+  { label: 'Leagues',      href: '/leagues',      Icon: IconLeagues },
   { label: 'Leaderboard',  href: '/leaderboard',  Icon: IconLeaderboard },
   { label: 'Rules',        href: '/rules',        Icon: IconRules },
 ]

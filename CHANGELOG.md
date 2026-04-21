@@ -1,65 +1,33 @@
 # Changelog
 
-All notable changes to THEO are recorded here in plain English.
-
----
+All notable changes to THEO are documented here.
 
 ## [Unreleased]
 
-## [0.3.0] — 2026-04-14
-
 ### Added
-- **Admin panel** — A full management dashboard at `/admin`, accessible only to users with admin access. Organized into five tabs.
-- **Season & Week tab** — Create sports (e.g. College Football), create seasons, mark a season as the active one, create weeks, mark weeks as complete, and delete seasons or weeks (blocked if they have data attached to them).
-- **Games tab** — Add games to the current week. Includes ESPN auto-fill: type an ESPN game ID and the app looks up the teams and kickoff time automatically. Admins also set the point spread, which team is favored, and how many points the game is worth. Games can be edited, deleted, or voided (voiding zeroes out all picks for that game). Editing and deleting are blocked within 15 minutes of kickoff.
-- **Scores tab** — Refresh live scores from ESPN with one click. The app fetches all games in the current week, updates scores and statuses, and automatically calculates who covered the spread and awards points to picks the moment a game goes final. Admins can also enter scores manually as an override.
-- **Email tab** — Generate a weekly preview email draft using Claude AI (writes game-by-game commentary automatically), edit the draft, write a subject line, and send it to all opted-in users via Resend. Sent emails are logged in a history table.
-- **Users tab** — View all registered users (email, username, join date) and toggle admin access on or off. Admins cannot remove their own access.
-- **THEO logo** — Purple hexagon logo with "THEO" wordmark, shown in the top-left corner after logging in and in the admin panel header.
-- **Brand color** — Purple (`#5C5BF0`) applied consistently to all buttons and active states across the app.
-- **ESPN score helper** (`src/lib/espn.ts`) — Internal module that handles all communication with the ESPN unofficial API, including converting kickoff times to Eastern time for correct date lookups.
-- **Scoring helper** (`src/lib/scoring.ts`) — Internal module with the ATS (against the spread) calculation and points-earned calculation logic, shared across the app.
-- **Admin database client** (`src/lib/supabase/admin.ts`) — A special internal database connection that uses the service role key, allowing admin actions to bypass row-level security when needed (e.g. reading all users' email addresses).
-- **`requireAdmin()` helper** (`src/app/admin/actions/helpers.ts`) — A shared function used by every admin server action to verify the caller is a logged-in admin before doing anything. Prevents unauthorized access even if someone calls an action directly.
+- **Delete league** — commissioners can now delete a league from the Members tab; this soft-deletes it (sets it inactive so it disappears for all members) while keeping all pick history in the database in case an admin needs to restore it
+- **Leagues security hardening** — three database-level protections now prevent users from bypassing app restrictions via the API directly: (1) the groups table is now members-only so join codes cannot be enumerated, (2) joining a league now goes through a database function that validates the code, checks capacity, and adds the membership in one atomic step, (3) direct inserts into group_members now require the user's own ID so the join code cannot be skipped
+- **Join preview step** — before confirming a join, the app looks up the league name, sport, and member count via a database function that only reveals the one league matching the entered code, not the full table
+- **Join code character filter** — the join code input box now silently strips characters that look alike (O/0 and I/1) as you type, matching the character set used when codes are generated
+- **Database-level picks integrity** — a new Postgres trigger (`enforce_picks_integrity`) on the `picks` table now enforces three rules the UI previously could not guarantee: (1) no new picks or changes after kickoff minus 15 minutes, (2) `week_id` is always pulled from the game record rather than trusting what the client sends, (3) regular users cannot change the `points_earned` field
+- **DB error screen on picks page** — if the database query fails when loading games or picks, users now see a "Something Went Wrong" screen instead of a blank or misleading state
+- **Pending state on team buttons** — tapping a team briefly grays out both buttons while the save is in flight, preventing double-taps
+
+### Fixed
+- **League name edit pre-fills current name** — the edit form now opens with the existing league name already filled in instead of a blank field
+- **Hub rank now handles ties correctly** — two members with the same total points share the same rank number on the leagues hub, matching how the detail page leaderboard already worked
+- **Infinite recursion in league membership policies** — the database policies that check "is this user in this group?" were querying themselves in a loop; fixed by adding a helper database function (`get_my_group_ids`) that reads memberships directly without triggering the same policy check
+- **League creation RLS conflict** — creating a league failed with an access-denied error after the user had no leagues (empty group_members table); the root cause was that inserting a group and then reading it back in the same call was blocked by the new members-only SELECT policy; fixed by generating the league ID in TypeScript before the insert so we never need to read the row back
+- **Sport ID not validated on league creation** — the server now confirms the selected sport is currently active before creating a league, preventing someone from bypassing the UI dropdown and submitting any sport ID they want
+- **Picks missing after re-login** — picks were always saved correctly, but the server query used `week_id` to find them, which could mismatch the value the DB trigger stores; changed to look up picks by `game_id` instead, which is always precise
+- **Score refresh only updated first week** — the admin Refresh Scores button and the automatic cron job only looked at the earliest non-complete week per sport; games in Week 2, 3, etc. were never refreshed; now all non-complete weeks across all active sports are processed
+- **Admin manual score override dropdown empty** — same root cause as the score refresh bug above; the admin game list was also limited to the first non-complete week
+- **Double-down Step A error silently ignored** — if clearing a previous double-down failed, the app continued and could write a second double-down; now catches the error, shows a message, and skips the second step
+- **Remove-pick and double-down errors showed no message** — failed operations reverted the UI silently; now shows the same red error banner that pick saves already used
+- **Cron job used console.log instead of console.info** — minor log-level fix on the success message in the cron route
 
 ### Changed
-- Home page (`/`) now redirects to `/auth` instead of showing the default Next.js boilerplate.
-- Browser tab title changed from "Create Next App" to "THEO".
-- Auth page (`/auth`) redesigned to match THEO branding: logo, purple button, clean dark layout.
-
-### Fixed
-- Production build now compiles without TypeScript errors (fixed a type annotation in the admin user list that was causing the build to fail).
-- Score refresh now reports which individual games failed to update rather than stopping entirely if one game has a problem.
-- Admin user list pagination now logs an error clearly instead of silently producing an incomplete list if an API call fails.
-- Pick scoring now throws an explicit error if any pick update fails, instead of silently leaving some picks unscored while marking the game as final.
-
----
-
-## [0.2.0] — 2026-04-13
-
-### Added
-- **Login page** — Users can log in with their email and password at `/auth`. Wrong credentials show a clear error message.
-- **Sign-up page** — New users can create an account with a username, email, and password at the same `/auth` page. The login and sign-up forms share one page with a toggle between them.
-- **Username rules** — Usernames must be 3–30 characters and can only contain letters, numbers, underscores (`_`), and hyphens (`-`). These rules are enforced before the form submits.
-- **Automatic profile creation** — When someone signs up, a profile row is automatically created in the database by a trigger. No extra step needed.
-- **Log out** — A "Log Out" button on the dashboard ends the session and sends the user back to `/auth`.
-- **Protected routes** — Visitors who are not logged in are automatically redirected to `/auth` if they try to reach `/dashboard`, `/picks`, `/leaderboard`, `/groups`, or `/admin`.
-- **Admin-only route** — Logged-in users without admin access who visit `/admin` are redirected to `/dashboard`.
-- **Already logged in redirect** — Logged-in users who visit `/auth` are automatically sent to `/dashboard`.
-- **Supabase client helpers** — Two internal helper files created: one for server-side code (`src/lib/supabase/server.ts`) and one for browser-side code (`src/lib/supabase/client.ts`).
-- **Middleware** — A `src/middleware.ts` file now runs before every page load to enforce all login/redirect rules.
-
-### Fixed
-- Session cookies are now fully preserved (including security attributes) when the app redirects a user, preventing rare cases where users could be logged out unexpectedly.
-- Signup error messages now correctly distinguish between a duplicate email, a duplicate username, and any other unexpected failure — instead of showing a misleading "username taken" message for all errors.
-
----
-
-## [0.1.0] — 2026-04-08
-
-### Added
-- Initial Next.js 14 project scaffold with TypeScript and Tailwind CSS.
-- Full database schema covering: users, sports, seasons, weeks, games, picks, groups, group members, and email logs.
-- Row Level Security (RLS) enabled on all database tables — users can only access data they are allowed to see.
-- Database trigger that automatically creates a user profile row whenever someone signs up.
-- Placeholder pages for `/auth`, `/dashboard`, `/picks`, `/leaderboard`, `/groups`, and `/admin`.
+- **Locked game pick display** — after a matchup locks, the card now shows the team you picked (logo, short name, spread) in a clear full-width row, instead of grayed-out buttons that made it unclear whether you had picked or not
+- **Lock bar position** — the "Matchup has locked" bar now appears below the picked team row instead of above it
+- **Multi-sport is now live** — the app simultaneously supports CFB, NFL, MLB, NBA, and NHL; sport tabs appear on the picks page when multiple sports have an active season
+- **ESPN sport paths centralised** — adding a new sport only requires one entry in the ESPN_SPORT_PATHS map in src/lib/espn.ts
