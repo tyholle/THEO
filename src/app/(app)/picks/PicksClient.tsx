@@ -14,7 +14,7 @@
 // then confirm with the database. If the database call fails, we
 // revert the UI back to where it was. This makes the app feel instant.
 
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import WeekStrip from './WeekStrip'
@@ -108,6 +108,38 @@ export default function PicksClient({
   const [picks, setPicks] = useState<Record<string, PickRow>>(
     () => Object.fromEntries(initialPicks.map(p => [p.game_id, p]))
   )
+
+  // -----------------------------------------------------------------------
+  // Sync picks state when the server sends fresh data
+  //
+  // When router.refresh() re-runs the server component (e.g. during live
+  // score polling, or after a login redirect lands on a stale cache),
+  // React updates the initialPicks prop without re-mounting the component.
+  // Without this effect, the picks state would stay at its initial value
+  // and never reflect the fresh server data — making picks appear missing.
+  //
+  // We use a ref to read the latest pendingPicks value inside the effect
+  // without adding it to the dependency array. This prevents the effect
+  // from re-running every time a pick transitions from pending to confirmed,
+  // which would cause a disruptive state reset mid-save.
+  // -----------------------------------------------------------------------
+  const pendingPicksRef = useRef(pendingPicks)
+  useEffect(() => { pendingPicksRef.current = pendingPicks }, [pendingPicks])
+
+  useEffect(() => {
+    const serverMap = Object.fromEntries(initialPicks.map(p => [p.game_id, p]))
+    setPicks(prev => {
+      // If no picks are in-flight, just replace with server data directly
+      if (pendingPicksRef.current.size === 0) return serverMap
+      // Otherwise, keep the optimistic value for any pick currently being saved
+      // so we don't clear the highlighted selection mid-flight
+      const next = { ...serverMap }
+      for (const gameId of Array.from(pendingPicksRef.current)) {
+        if (prev[gameId]) next[gameId] = prev[gameId]
+      }
+      return next
+    })
+  }, [initialPicks])
 
   // -----------------------------------------------------------------------
   // handlePick

@@ -18,6 +18,7 @@
 //   7. Renders <PicksClient> with all of this as props
 
 import { redirect } from 'next/navigation'
+import { unstable_noStore as noStore } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import PicksClient from './PicksClient'
 
@@ -76,6 +77,12 @@ export default async function PicksPage({
 }: {
   searchParams: Promise<{ week?: string; sport?: string }>
 }) {
+  // noStore() tells Next.js to never cache the data fetched in this component.
+  // Without this, Next.js can cache individual database query results and serve
+  // them to a re-logging-in user even when the data has changed — causing picks
+  // to appear missing on a fresh page load even though they exist in Supabase.
+  noStore()
+
   const supabase = createClient()
 
   // ---- Auth check ----
@@ -155,6 +162,10 @@ export default async function PicksPage({
     .from('games')
     .select('id, week_id, home_team, away_team, home_short_name, away_short_name, home_logo_url, away_logo_url, spread, spread_favors, point_value, kickoff_at, home_score, away_score, status, ats_result')
     .eq('week_id', selectedWeek.id)
+    // Sort by point value descending (10-point game first, 1-point game last)
+    // so the highest-stakes matchups always appear at the top.
+    // Kickoff time is the secondary sort so same-value games stay chronological.
+    .order('point_value', { ascending: false })
     .order('kickoff_at', { ascending: true })
 
   if (gamesError) return <DatabaseErrorState />

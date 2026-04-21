@@ -5,6 +5,8 @@ All notable changes to THEO are documented here.
 ## [Unreleased]
 
 ### Added
+- **Global leaderboard** — new page at `/leaderboard` showing rankings for all players on the app; sport pill buttons at the top let you filter by sport (e.g. College Football) or view a combined "Overall" ranking; a sort toggle lets you switch between ranking by total points (default) or accuracy %; your own row is always visible — highlighted purple in the list if you're in the top 100, or pinned above the list with a divider if you're outside it; accuracy % only counts true wins and losses — pushed games (where the spread lands exactly on the line) are excluded so they don't unfairly hurt your percentage; users with zero points (all losses) are hidden from the public leaderboard
+- **Score refresh recovery pass** — every time scores refresh (via the admin button or the automatic cron job), a second pass now checks for any games already marked as "final" that still have un-scored picks; this handles the rare case where a previous refresh was interrupted mid-way and some picks were left without points; the pass re-runs scoring safely without overwriting correct values
 - **Delete league** — commissioners can now delete a league from the Members tab; this soft-deletes it (sets it inactive so it disappears for all members) while keeping all pick history in the database in case an admin needs to restore it
 - **Leagues security hardening** — three database-level protections now prevent users from bypassing app restrictions via the API directly: (1) the groups table is now members-only so join codes cannot be enumerated, (2) joining a league now goes through a database function that validates the code, checks capacity, and adds the membership in one atomic step, (3) direct inserts into group_members now require the user's own ID so the join code cannot be skipped
 - **Join preview step** — before confirming a join, the app looks up the league name, sport, and member count via a database function that only reveals the one league matching the entered code, not the full table
@@ -27,6 +29,7 @@ All notable changes to THEO are documented here.
 - **Cron job used console.log instead of console.info** — minor log-level fix on the success message in the cron route
 
 ### Changed
+- **Post-login redirect goes to picks** — after signing in, users land directly on the picks page; the separate dashboard page has been removed as it was redundant
 - **Locked game pick display** — after a matchup locks, the card now shows the team you picked (logo, short name, spread) in a clear full-width row, instead of grayed-out buttons that made it unclear whether you had picked or not
 - **Lock bar position** — the "Matchup has locked" bar now appears below the picked team row instead of above it
 - **Multi-sport is now live** — the app simultaneously supports CFB, NFL, MLB, NBA, and NHL; sport tabs appear on the picks page when multiple sports have an active season

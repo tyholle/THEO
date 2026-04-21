@@ -48,12 +48,19 @@ function Message({ error, success }: { error?: string | null; success?: string |
 // EditGameRow — inline edit form for a single game
 // -----------------------------------------------------------------------
 function EditGameRow({
-  game, onCancel, onSave,
+  game, onCancel, onSave, unavailablePointValues,
 }: {
   game: Game
   onCancel: () => void
   onSave: (formData: FormData) => void
+  // Point values already taken by OTHER games in the same week.
+  // This game's own current value is excluded so it can be re-selected.
+  unavailablePointValues: number[]
 }) {
+  // Values 1–10 that are still available (not taken by other games this week)
+  const availableValues = Array.from({ length: 10 }, (_, i) => i + 1)
+    .filter(v => !unavailablePointValues.includes(v))
+
   return (
     <tr className="bg-zinc-800/60">
       <td colSpan={7} className="px-4 py-4">
@@ -89,10 +96,14 @@ function EditGameRow({
             </select>
           </div>
           <div>
-            <label className="block text-xs text-zinc-400 mb-1">Point Value (1–10)</label>
-            <input name="point_value" type="number" min="1" max="10" defaultValue={game.point_value} required
+            <label className="block text-xs text-zinc-400 mb-1">Point Value</label>
+            <select name="point_value" defaultValue={game.point_value} required
               className="w-full rounded bg-zinc-700 border border-zinc-600 px-2 py-1 text-sm text-zinc-100
-                         focus:outline-none focus:ring-1 focus:ring-brand-500" />
+                         focus:outline-none focus:ring-1 focus:ring-brand-500">
+              {availableValues.map(v => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-xs text-zinc-400 mb-1">Kickoff Time</label>
@@ -147,6 +158,21 @@ export default function GameTab({ sports, seasons, weeks, currentWeekGames, curr
 
   // Which game row is being edited
   const [editingId, setEditingId] = useState<string | null>(null)
+
+  // Track which week the admin has selected in the Add Game form.
+  // We use this to know which point values are already taken in that week,
+  // so we can show only the available options in the dropdown.
+  // Defaults to the current week so the dropdown is useful immediately.
+  const [selectedFormWeekId, setSelectedFormWeekId] = useState<string>(currentWeekId ?? '')
+
+  // Point values 1–10 that are still available in the selected Add form week.
+  // We only know which values are taken for the current week (currentWeekGames).
+  // For other weeks, we show all 1–10 and rely on the server to reject duplicates.
+  const takenInSelectedWeek = selectedFormWeekId === currentWeekId
+    ? currentWeekGames.map(g => g.point_value)
+    : []
+  const availableAddValues = Array.from({ length: 10 }, (_, i) => i + 1)
+    .filter(v => !takenInSelectedWeek.includes(v))
 
   // ---- ESPN lookup ----
   function handleLookup() {
@@ -292,7 +318,11 @@ export default function GameTab({ sports, seasons, weeks, currentWeekGames, curr
 
             <div>
               <label className="block text-xs font-medium text-zinc-400 mb-1">Week</label>
-              <select name="week_id" required defaultValue={currentWeekId ?? ''}
+              <select
+                name="week_id"
+                required
+                value={selectedFormWeekId}
+                onChange={e => setSelectedFormWeekId(e.target.value)}
                 className="w-full rounded-lg bg-zinc-800 border border-zinc-700 px-3 py-2
                            text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500">
                 <option value="">— Select week —</option>
@@ -336,10 +366,17 @@ export default function GameTab({ sports, seasons, weeks, currentWeekGames, curr
               <label className="block text-xs font-medium text-zinc-400 mb-1">
                 Point Value (1–10, higher = more important game)
               </label>
-              <input name="point_value" type="number" min="1" max="10" required placeholder="5"
+              {/* Only values not yet taken in the selected week are shown.
+                  If a different week is selected (not current), all 1–10 are available
+                  since we don't have that week's games loaded — server enforces uniqueness. */}
+              <select name="point_value" required
                 className="w-full rounded-lg bg-zinc-800 border border-zinc-700 px-3 py-2
-                           text-sm text-zinc-100 placeholder-zinc-500
-                           focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                           text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                <option value="">— Select value —</option>
+                {availableAddValues.map(v => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
             </div>
 
             <button type="submit" disabled={isPending}
@@ -387,6 +424,12 @@ export default function GameTab({ sports, seasons, weeks, currentWeekGames, curr
                       game={game}
                       onCancel={() => setEditingId(null)}
                       onSave={(fd) => handleEditSave(game.id, fd)}
+                      // Pass the point values of all OTHER games this week so the
+                      // dropdown only shows values that aren't already taken.
+                      // This game's own current value is excluded so it can keep it.
+                      unavailablePointValues={currentWeekGames
+                        .filter(g => g.id !== game.id)
+                        .map(g => g.point_value)}
                     />
                   )
                 }

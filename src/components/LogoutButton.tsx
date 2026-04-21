@@ -2,11 +2,9 @@
 // 'use client' is required because this button handles a click event,
 // which is a browser interaction — it can't run on the server.
 
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LogoutButton() {
-  const router = useRouter()
   const supabase = createClient()
 
   async function handleLogout() {
@@ -18,13 +16,14 @@ export default function LogoutButton() {
     if (error) {
       // If sign-out fails (e.g., network issue), tell the user rather than
       // silently redirecting them — which would send them to /auth and then
-      // immediately back to /dashboard because the session is still active.
+      // immediately back to /picks because the session is still active.
       alert('Could not log out. Please try again.')
       return
     }
 
-    // After signing out successfully, send the user back to the auth page.
-    router.push('/auth')
+    // Hard navigation: bypass the Next.js router cache so the auth page
+    // always renders fresh and the previous user's session data is gone.
+    window.location.href = '/auth'
   }
 
   return (

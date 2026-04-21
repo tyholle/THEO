@@ -87,6 +87,19 @@ export async function createGame(formData: FormData) {
       return { error: 'Spread must be a negative number (e.g. -7.5).' }
     }
 
+    // No two games in the same week may share a point value.
+    // We check the DB here so this rule holds even if the UI dropdown is bypassed.
+    const { data: conflict } = await supabase
+      .from('games')
+      .select('id')
+      .eq('week_id', week_id)
+      .eq('point_value', point_value)
+      .limit(1)
+
+    if (conflict && conflict.length > 0) {
+      return { error: `Point value ${point_value} is already assigned to another game this week. Each game must have a unique point value.` }
+    }
+
     // If an ESPN game ID was provided, fetch team logos and short names now.
     // We do this silently — if ESPN is unavailable, the game still gets created,
     // just without logos (the picks page handles null gracefully).
@@ -149,7 +162,7 @@ export async function updateGame(gameId: string, formData: FormData) {
     // keys using dot notation in the select string.
     const { data: game, error: fetchError } = await supabase
       .from('games')
-      .select('kickoff_at, weeks(seasons(sports(slug)))')
+      .select('kickoff_at, week_id, weeks(seasons(sports(slug)))')
       .eq('id', gameId)
       .single()
 
@@ -174,6 +187,22 @@ export async function updateGame(gameId: string, formData: FormData) {
     }
     if (spread >= 0) {
       return { error: 'Spread must be a negative number (e.g. -7.5).' }
+    }
+
+    // No two games in the same week may share a point value.
+    // Exclude the current game so it can keep its own value unchanged.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const gameWeekId: string = (game as any).week_id
+    const { data: conflict } = await supabase
+      .from('games')
+      .select('id')
+      .eq('week_id', gameWeekId)
+      .eq('point_value', point_value)
+      .neq('id', gameId)
+      .limit(1)
+
+    if (conflict && conflict.length > 0) {
+      return { error: `Point value ${point_value} is already assigned to another game this week.` }
     }
 
     // If an ESPN game ID is provided, re-fetch logos and short names so they

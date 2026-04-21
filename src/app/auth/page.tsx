@@ -8,14 +8,12 @@
 // "Already have an account?" switches back.
 
 import { useState, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 
 type Mode = 'login' | 'signup'
 
 export default function AuthPage() {
-  const router   = useRouter()
   // useMemo ensures one client instance for the lifetime of this component,
   // instead of creating a new one on every keystroke
   const supabase = useMemo(() => createClient(), [])
@@ -47,8 +45,11 @@ export default function AuthPage() {
       return
     }
 
-    router.refresh()
-    router.push('/picks')
+    // Hard navigation: bypass the Next.js router cache so the picks page
+    // always renders fresh from the server with the new auth cookie.
+    // router.push('/picks') would serve a cached snapshot of the page that
+    // might not include the user's picks (e.g. from a prior logged-out visit).
+    window.location.href = '/picks'
   }
 
   // ---- Sign up ----
@@ -97,8 +98,9 @@ export default function AuthPage() {
       return
     }
 
-    router.refresh()
-    router.push('/picks')
+    // Same hard navigation as handleLogin — ensures a fresh server render
+    // after signup so the picks page loads with the new user's session.
+    window.location.href = '/picks'
   }
 
   // -----------------------------------------------------------------------
