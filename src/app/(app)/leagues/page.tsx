@@ -168,7 +168,7 @@ export default async function LeaguesPage() {
         const totals: Record<string, number> = {}
         for (const mid of memberIds) totals[mid] = 0
         for (const p of picks ?? []) {
-          totals[p.user_id] = (totals[p.user_id] ?? 0) + (p.points_earned ?? 0)
+          totals[p.user_id] = (totals[p.user_id] ?? 0) + Number(p.points_earned ?? 0)
         }
 
         // Sort by total points (desc), then assign tie-aware ranks.

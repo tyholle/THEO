@@ -257,7 +257,7 @@ function WeeklyStandingsTable({
     const memberPicks = Object.values(pickMap[member.userId] ?? {})
     weekTotals[member.userId] = memberPicks
       .filter(p => p.points_earned !== null)
-      .reduce((sum, p) => sum + (p.points_earned ?? 0), 0)
+      .reduce((sum, p) => sum + Number(p.points_earned ?? 0), 0)
   }
 
   // Sort members by this week's points (desc)
@@ -388,7 +388,7 @@ function PickCell({ game, pick, showLock }: PickCellProps) {
 
   if (game.ats_result !== null) {
     // Game is finished — check if pick was correct
-    if ((pick.points_earned ?? 0) > 0) {
+    if (Number(pick.points_earned ?? 0) > 0) {
       // Correct pick → green
       borderCls = 'border-green-500/60'
       bgCls     = 'bg-green-900/30'
@@ -403,13 +403,15 @@ function PickCell({ game, pick, showLock }: PickCellProps) {
     }
   }
 
+  const titleText = pick.is_double_down ? `${shortName} (double down)` : shortName
+
   return (
     <div
-      title={shortName}
+      title={titleText}
       className={`
-        w-8 h-8 rounded-lg border ${borderCls} ${bgCls}
-        flex items-center justify-center overflow-hidden
-        relative flex-shrink-0
+        h-8 rounded-lg border ${borderCls} ${bgCls}
+        flex items-center justify-center flex-shrink-0
+        ${pick.is_double_down ? 'w-auto pl-1 pr-1.5 gap-1' : 'w-8 overflow-hidden'}
       `}
     >
       {logoUrl ? (
@@ -417,19 +419,27 @@ function PickCell({ game, pick, showLock }: PickCellProps) {
         <img
           src={logoUrl}
           alt={shortName}
-          className="w-6 h-6 object-contain"
+          className="w-6 h-6 flex-shrink-0 object-contain"
         />
       ) : (
         // Fallback: 3-letter abbreviation
-        <span className="text-[8px] font-bold text-zinc-300 text-center leading-none px-0.5">
+        <span className="w-6 text-[8px] font-bold text-zinc-300 text-center leading-none px-0.5 flex-shrink-0">
           {shortName.slice(0, 3).toUpperCase()}
         </span>
       )}
 
-      {/* Double-down indicator — tiny "2" badge in the corner */}
+      {/* Double-down — embedded inside the cell, expanding it into a pill */}
       {pick.is_double_down && (
-        <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-brand-500 border border-zinc-950 flex items-center justify-center text-[6px] font-bold text-white">
-          2
+        <span
+          className="flex h-5 w-5 items-center justify-center rounded bg-brand-500 shadow-sm flex-shrink-0"
+          aria-hidden
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/graphics/doubledown.svg"
+            alt=""
+            className="h-3 w-3 object-contain"
+          />
         </span>
       )}
     </div>

@@ -217,9 +217,9 @@ export default async function LeagueDetailPage({
   const rawStandings = members.map(member => {
     // Only count picks that have been scored (game is finished)
     const scored      = allPicks.filter(p => p.user_id === member.userId && p.points_earned !== null)
-    const totalPoints  = scored.reduce((sum, p) => sum + (p.points_earned ?? 0), 0)
+    const totalPoints  = scored.reduce((sum, p) => sum + Number(p.points_earned ?? 0), 0)
     const finishedPicks = scored.length
-    const correctPicks  = scored.filter(p => (p.points_earned ?? 0) > 0).length
+    const correctPicks  = scored.filter(p => Number(p.points_earned ?? 0) > 0).length
     const accuracy      = finishedPicks > 0
       ? Math.round((correctPicks / finishedPicks) * 100)
       : 0
@@ -251,6 +251,7 @@ export default async function LeagueDetailPage({
         sportName,
       }}
       currentUserId={user.id}
+      currentUsername={myMembership.username}
       isOwner={isOwner}
       members={members}
       weeks={weeks}
