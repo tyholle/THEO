@@ -43,6 +43,34 @@ function formatKickoff(kickoffAt: string): string {
 }
 
 // -----------------------------------------------------------------------
+// Pick button gradients: when a team is selected and the game isn’t scored yet
+// (or it’s a push), tint the background with that team’s ESPN primary color
+// (6 hex digits, e.g. "990000") instead of the default brand purple.
+// -----------------------------------------------------------------------
+function teamColorGradientH(hex: string | null | undefined): { background: string } | undefined {
+  const s = (hex ?? '').replace(/^#/, '')
+  if (!/^[0-9a-fA-F]{6}$/.test(s)) return undefined
+  const r = parseInt(s.slice(0, 2), 16)
+  const g = parseInt(s.slice(2, 4), 16)
+  const b = parseInt(s.slice(4, 6), 16)
+  return {
+    background: `linear-gradient(90deg, rgb(24 24 27) 0%, rgba(${r},${g},${b},0.35) 42%, rgba(${r},${g},${b},0.92) 100%)`,
+  }
+}
+
+// Locked pick row: vertical gradient, top = team color into dark.
+function teamColorGradientV(hex: string | null | undefined): { background: string } | undefined {
+  const s = (hex ?? '').replace(/^#/, '')
+  if (!/^[0-9a-fA-F]{6}$/.test(s)) return undefined
+  const r = parseInt(s.slice(0, 2), 16)
+  const g = parseInt(s.slice(2, 4), 16)
+  const b = parseInt(s.slice(4, 6), 16)
+  return {
+    background: `linear-gradient(180deg, rgba(${r},${g},${b},0.9) 0%, rgba(${r},${g},${b},0.38) 50%, rgb(9 9 11) 100%)`,
+  }
+}
+
+// -----------------------------------------------------------------------
 // Helper: build the spread label shown on each team button.
 //
 // Spread is stored as a negative number (e.g. -7).
@@ -172,20 +200,20 @@ function TeamButton({
   team,
   shortName,
   logoUrl,
+  teamColor,
   spread,
   isPicked,
   isOtherPicked,
-  outcome,
   locked,
   onClick,
 }: {
   team: 'home' | 'away'
   shortName: string
   logoUrl: string | null
+  teamColor: string | null
   spread: string
   isPicked: boolean
   isOtherPicked: boolean
-  outcome: 'win' | 'loss' | 'push' | null
   locked: boolean
   onClick: () => void
 }) {
@@ -193,15 +221,14 @@ function TeamButton({
     ? 'w-14 flex-none'
     : 'flex-1'
 
+  // Always use team color if picked
+  const pickTint = isPicked ? teamColorGradientH(teamColor) : undefined
+
   let bgClass: string
   if (!isPicked) {
     bgClass = 'bg-zinc-800 hover:bg-zinc-700'
-  } else if (outcome === 'win') {
-    bgClass = 'bg-gradient-to-r from-zinc-900 via-emerald-900/60 to-emerald-700/50'
-  } else if (outcome === 'loss') {
-    bgClass = 'bg-gradient-to-r from-zinc-900 via-red-900/60 to-red-700/50'
   } else {
-    bgClass = 'bg-gradient-to-r from-zinc-900 via-brand-900 to-brand-600'
+    bgClass = pickTint ? 'bg-transparent' : 'bg-gradient-to-r from-zinc-900 via-brand-900 to-brand-600'
   }
 
   return (
@@ -210,6 +237,7 @@ function TeamButton({
       data-team={team}
       onClick={onClick}
       disabled={locked}
+      style={pickTint}
       className={`
         flex items-center justify-center gap-2 rounded-xl py-4 px-3
         transition-all duration-200 overflow-hidden
@@ -281,49 +309,69 @@ function DoubleDownButton({
 function LockedPickRow({
   shortName,
   logoUrl,
+  teamColor,
   spread,
   outcome,
   isDoubleDown,
 }: {
   shortName: string
   logoUrl: string | null
+  teamColor: string | null
   spread: string
   outcome: 'win' | 'loss' | 'push' | null
   isDoubleDown: boolean
 }) {
-  // Same gradient logic as TeamButton — outcome determines the color
-  let bgClass: string
-  if (outcome === 'win') {
-    bgClass = 'bg-gradient-to-b from-emerald-700/50 via-emerald-900/60 to-zinc-900'
-  } else if (outcome === 'loss') {
-    bgClass = 'bg-gradient-to-b from-red-700/50 via-red-900/60 to-zinc-900'
-  } else {
-    // Active pick (game not yet scored) — brand purple
-    bgClass = 'bg-gradient-to-b from-brand-600 via-brand-900 to-zinc-900'
-  }
+  // Always use the team color gradient or fallback to a neutral dark background
+  const pickTint = teamColorGradientV(teamColor)
+  const bgClass = pickTint ? 'bg-transparent' : 'bg-zinc-800'
 
   return (
-    <div className={`mx-4 mb-3 relative flex items-center justify-center gap-3 rounded-xl py-4 px-4 ${bgClass}`}>
-      {/* Team logo */}
-      <TeamLogo logoUrl={logoUrl} shortName={shortName} size="md" />
+    <div
+      className={`mx-4 mb-3 relative flex items-center justify-center gap-3 rounded-xl py-4 px-4 overflow-hidden ${bgClass}`}
+      style={pickTint}
+    >
+      {/* Left accent bar for outcomes */}
+      {outcome === 'win' && (
+        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.5)]" />
+      )}
+      {outcome === 'loss' && (
+        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.5)]" />
+      )}
+      {outcome === 'push' && (
+        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-zinc-500 shadow-[0_0_12px_rgba(113,113,122,0.5)]" />
+      )}
 
-      {/* Team name and spread */}
+      <TeamLogo logoUrl={logoUrl} shortName={shortName} size="md" />
       <div className="flex flex-col items-start min-w-0">
-        <span className="text-white font-bold text-sm leading-tight">{shortName}</span>
+        <span className="text-white font-bold text-sm truncate leading-tight">{shortName}</span>
         <span className="text-zinc-400 text-xs font-medium leading-tight">{spread}</span>
       </div>
-
-      {/* Double-down icon — only shown if the user doubled down on this game */}
-      {isDoubleDown && (
-        <div className="absolute right-4 top-1/2 -translate-y-1/2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
+      
+      <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+        {outcome === 'win' && (
+          <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </div>
+        )}
+        {outcome === 'loss' && (
+          <div className="w-6 h-6 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </div>
+        )}
+        {outcome === 'push' && (
+          <div className="w-6 h-6 rounded-full bg-zinc-500/20 text-zinc-400 flex items-center justify-center">
+            <span className="text-[10px] font-black tracking-tighter">PUSH</span>
+          </div>
+        )}
+        {isDoubleDown && (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src="/graphics/doubledown.svg"
             alt="Double down"
             className="w-5 h-5 flex-shrink-0 opacity-90"
           />
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
@@ -356,6 +404,7 @@ export default function GameCard({ game, pick, isPending, onPick, onRemovePick, 
   const pickedShort    = pick?.picked_team === 'home' ? homeShort    : awayShort
   const pickedLogoUrl  = pick?.picked_team === 'home' ? game.home_logo_url : game.away_logo_url
   const pickedSpread   = pick?.picked_team === 'home' ? homeSpread   : awaySpread
+  const pickedTeamColor = pick?.picked_team === 'home' ? game.home_team_color : game.away_team_color
 
   return (
     <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
@@ -406,6 +455,7 @@ export default function GameCard({ game, pick, isPending, onPick, onRemovePick, 
           <LockedPickRow
             shortName={pickedShort}
             logoUrl={pickedLogoUrl}
+            teamColor={pickedTeamColor}
             spread={pickedSpread}
             outcome={outcome}
             isDoubleDown={pick.is_double_down}
@@ -429,10 +479,10 @@ export default function GameCard({ game, pick, isPending, onPick, onRemovePick, 
               team="away"
               shortName={awayShort}
               logoUrl={game.away_logo_url}
+              teamColor={game.away_team_color}
               spread={awaySpread}
               isPicked={pick?.picked_team === 'away'}
               isOtherPicked={pick?.picked_team === 'home'}
-              outcome={pick?.picked_team === 'away' ? outcome : null}
               locked={locked || isPending}
               onClick={() => onPick('away')}
             />
@@ -440,10 +490,10 @@ export default function GameCard({ game, pick, isPending, onPick, onRemovePick, 
               team="home"
               shortName={homeShort}
               logoUrl={game.home_logo_url}
+              teamColor={game.home_team_color}
               spread={homeSpread}
               isPicked={pick?.picked_team === 'home'}
               isOtherPicked={pick?.picked_team === 'away'}
-              outcome={pick?.picked_team === 'home' ? outcome : null}
               locked={locked || isPending}
               onClick={() => onPick('home')}
             />

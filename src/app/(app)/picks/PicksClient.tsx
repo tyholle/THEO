@@ -274,6 +274,16 @@ export default function PicksClient({
 
     // ---- Step A: If turning ON, find and turn OFF any existing double-down ----
     if (willBeActive && previousDD) {
+      // Before proceeding, ensure the game we're moving the double-down FROM isn't already locked.
+      const previousGame = games.find(g => g.id === previousDD.game_id)
+      if (previousGame) {
+        const lockTime = new Date(previousGame.kickoff_at).getTime() - 15 * 60 * 1000
+        if (Date.now() >= lockTime) {
+          setSaveError('You cannot move your double down from a game that has already locked.')
+          return
+        }
+      }
+
       // Optimistically remove the old double-down from UI
       setPicks(prev => ({
         ...prev,
