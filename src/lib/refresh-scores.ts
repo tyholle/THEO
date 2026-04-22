@@ -26,13 +26,25 @@ export async function scoreGame(
   awayScore: number,
   spread: number,
   spreadFavors: 'home' | 'away',
-  pointValue: number
+  pointValue: number,
+  teamColors?: { home: string | null; away: string | null } | null
 ) {
   const atsResult = calculateAtsResult(homeScore, awayScore, spread, spreadFavors)
 
+  const update: Record<string, string | number | null> = {
+    ats_result: atsResult,
+    home_score: homeScore,
+    away_score: awayScore,
+    status: 'final',
+  }
+  if (teamColors) {
+    if (teamColors.home) update.home_team_color = teamColors.home
+    if (teamColors.away) update.away_team_color = teamColors.away
+  }
+
   const { error: gameError } = await supabase
     .from('games')
-    .update({ ats_result: atsResult, home_score: homeScore, away_score: awayScore, status: 'final' })
+    .update(update)
     .eq('id', gameId)
 
   if (gameError) throw new Error(`Failed to update game ats_result: ${gameError.message}`)
@@ -84,8 +96,10 @@ export async function runRefreshScores(supabase: SupabaseClient) {
 
   for (const season of activeSeasons) {
     // PostgREST returns many-to-one joins as an object, so sports is { slug: 'mlb' }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sportSlug: string = (season as any)?.sports?.slug ?? 'cfb'
+    // Supabase's inference doesn't resolve the nested sports shape, so we cast
+    // with an explicit type instead of the unsafe `as any` shortcut.
+    type SeasonWithSport = { id: string; sports: { slug: string } | null }
+    const sportSlug: string = (season as unknown as SeasonWithSport)?.sports?.slug ?? 'cfb'
 
     // Get ALL non-complete weeks for this sport (not just the first one).
     // Previously this only looked at the first non-complete week, which meant
@@ -146,13 +160,28 @@ export async function runRefreshScores(supabase: SupabaseClient) {
 
         if (newStatus === 'final' && homeScore !== null && awayScore !== null) {
           // Game just finished — calculate ATS and award points
-          await scoreGame(supabase, game.id, homeScore, awayScore, game.spread, game.spread_favors, game.point_value)
+          await scoreGame(
+            supabase,
+            game.id,
+            homeScore,
+            awayScore,
+            game.spread,
+            game.spread_favors,
+            game.point_value,
+            { home: espnGame.homeTeamColor, away: espnGame.awayTeamColor }
+          )
           scoredCount++
         } else {
-          // Still in progress or scheduled — just update the score display
+          // Still in progress or scheduled — update scores, status, and team colors from ESPN
           const { error: updateError } = await supabase
             .from('games')
-            .update({ home_score: homeScore, away_score: awayScore, status: newStatus })
+            .update({
+              home_score: homeScore,
+              away_score: awayScore,
+              status: newStatus,
+              ...(espnGame.homeTeamColor != null && { home_team_color: espnGame.homeTeamColor }),
+              ...(espnGame.awayTeamColor != null && { away_team_color: espnGame.awayTeamColor }),
+            })
             .eq('id', game.id)
 
           if (updateError) {

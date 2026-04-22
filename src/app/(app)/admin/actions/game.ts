@@ -4,7 +4,8 @@
 //
 // Covers: ESPN auto-fill lookup, add game, edit game, delete game, void game.
 // All write operations are blocked if the caller is not an admin.
-// Edit and delete are additionally blocked within 15 minutes of kickoff.
+// Edit is blocked within 15 minutes of kickoff. Delete is allowed anytime (admin)
+// and removes all picks for that game first, then the game row.
 
 import { revalidatePath } from 'next/cache'
 import { fetchGameById } from '@/lib/espn'
@@ -46,6 +47,8 @@ export async function lookupEspnGame(espnGameId: string, sportSlug: string) {
       awayShortName: game.awayShortName,
       homeLogoUrl:   game.homeLogoUrl,
       awayLogoUrl:   game.awayLogoUrl,
+      homeTeamColor: game.homeTeamColor,
+      awayTeamColor: game.awayTeamColor,
     }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Unknown error' }
@@ -107,6 +110,8 @@ export async function createGame(formData: FormData) {
     let away_short_name: string | null = null
     let home_logo_url:   string | null = null
     let away_logo_url:   string | null = null
+    let home_team_color: string | null = null
+    let away_team_color: string | null = null
 
     if (espn_game_id) {
       try {
@@ -116,6 +121,8 @@ export async function createGame(formData: FormData) {
           away_short_name = espnData.awayShortName
           home_logo_url   = espnData.homeLogoUrl
           away_logo_url   = espnData.awayLogoUrl
+          home_team_color = espnData.homeTeamColor
+          away_team_color = espnData.awayTeamColor
         }
       } catch {
         // ESPN lookup failed — game still saves, just without logo/short name
@@ -136,6 +143,8 @@ export async function createGame(formData: FormData) {
       away_short_name,
       home_logo_url,
       away_logo_url,
+      home_team_color,
+      away_team_color,
     })
 
     if (error) return { error: error.message }
@@ -191,8 +200,9 @@ export async function updateGame(gameId: string, formData: FormData) {
 
     // No two games in the same week may share a point value.
     // Exclude the current game so it can keep its own value unchanged.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const gameWeekId: string = (game as any).week_id
+    // week_id is included in the select above — TypeScript just doesn't
+    // always infer it from Supabase's generated types, so we cast safely.
+    const gameWeekId: string = (game as unknown as { week_id: string }).week_id
     const { data: conflict } = await supabase
       .from('games')
       .select('id')
@@ -215,15 +225,21 @@ export async function updateGame(gameId: string, formData: FormData) {
       away_short_name?: string | null
       home_logo_url?: string | null
       away_logo_url?: string | null
+      home_team_color?: string | null
+      away_team_color?: string | null
     } = {}
 
     if (espn_game_id) {
       try {
         // Derive the sport slug by following game → week → season → sport.
-        // TypeScript doesn't know the nested shape from supabase's inference,
-        // so we cast to `any` just for this one deeply-nested read.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const sportSlug: string = (game as any)?.weeks?.seasons?.sports?.slug ?? 'cfb'
+        // Supabase's TypeScript inference doesn't resolve nested FK joins like
+        // weeks(seasons(sports(slug))) into their correct shape, so we cast
+        // with an explicit local type instead of the unsafe `as any` shortcut.
+        type GameWithSportSlug = {
+          weeks: { seasons: { sports: { slug: string } | null } | null } | null
+        }
+        const sportSlug: string =
+          (game as unknown as GameWithSportSlug)?.weeks?.seasons?.sports?.slug ?? 'cfb'
         const espnData = await fetchGameById(espn_game_id, sportSlug)
         if (espnData) {
           espnFields = {
@@ -231,6 +247,8 @@ export async function updateGame(gameId: string, formData: FormData) {
             away_short_name: espnData.awayShortName,
             home_logo_url:   espnData.homeLogoUrl,
             away_logo_url:   espnData.awayLogoUrl,
+            home_team_color: espnData.homeTeamColor,
+            away_team_color: espnData.awayTeamColor,
           }
         }
       } catch {
@@ -257,7 +275,8 @@ export async function updateGame(gameId: string, formData: FormData) {
 
 // -----------------------------------------------------------------------
 // deleteGame
-// Permanently removes a game. Blocked within 15 minutes of kickoff.
+// Permanently removes a game and all picks for it (picks must go first — FK has no cascade).
+// Allowed at any time for admins, including after the pick lock window.
 // -----------------------------------------------------------------------
 export async function deleteGame(gameId: string) {
   try {
@@ -265,14 +284,14 @@ export async function deleteGame(gameId: string) {
 
     const { data: game, error: fetchError } = await supabase
       .from('games')
-      .select('kickoff_at')
+      .select('id')
       .eq('id', gameId)
       .single()
 
     if (fetchError || !game) return { error: 'Game not found.' }
-    if (isLocked(game.kickoff_at)) {
-      return { error: 'Cannot delete a game within 15 minutes of kickoff.' }
-    }
+
+    const { error: picksError } = await supabase.from('picks').delete().eq('game_id', gameId)
+    if (picksError) return { error: picksError.message }
 
     const { error } = await supabase.from('games').delete().eq('id', gameId)
     if (error) return { error: error.message }

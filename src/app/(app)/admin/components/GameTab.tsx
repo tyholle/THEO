@@ -6,7 +6,7 @@
 //   - ESPN auto-fill: type a game ID and click "Look Up" to auto-fill teams + kickoff
 //   - Add Game form
 //   - Table of games in the current week with Edit, Delete, Void actions
-//   - Edit/Delete are hidden if game is within 15 minutes of kickoff
+//   - Edit is hidden if game is within 15 minutes of kickoff; Delete stays available
 
 import { useState, useTransition } from 'react'
 import { lookupEspnGame, createGame, updateGame, deleteGame, voidGame } from '../actions/game'
@@ -223,7 +223,9 @@ export default function GameTab({ sports, seasons, weeks, currentWeekGames, curr
 
   // ---- Delete ----
   function handleDelete(gameId: string, homeTeam: string, awayTeam: string) {
-    if (!confirm(`Delete ${awayTeam} at ${homeTeam}? This cannot be undone.`)) return
+    if (!confirm(
+      `Delete ${awayTeam} at ${homeTeam}? This removes the game and all picks on it. This cannot be undone.`,
+    )) return
     startTransition(async () => {
       const result = await deleteGame(gameId)
       if ('error' in result && result.error) {
@@ -456,23 +458,23 @@ export default function GameTab({ sports, seasons, weeks, currentWeekGames, curr
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {/* Edit & Delete only available before 15-min lockout */}
+                        {/* Edit only before 15-min lockout; Delete stays available after lock */}
                         {!locked && game.status !== 'void' && (
-                          <>
-                            <button
-                              onClick={() => setEditingId(game.id)}
-                              className="text-xs px-2 py-1 rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-200"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDelete(game.id, game.home_team, game.away_team)}
-                              disabled={isPending}
-                              className="text-xs px-2 py-1 rounded bg-red-900/50 hover:bg-red-900 text-red-300 disabled:opacity-50"
-                            >
-                              Delete
-                            </button>
-                          </>
+                          <button
+                            onClick={() => setEditingId(game.id)}
+                            className="text-xs px-2 py-1 rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-200"
+                          >
+                            Edit
+                          </button>
+                        )}
+                        {game.status !== 'void' && (
+                          <button
+                            onClick={() => handleDelete(game.id, game.home_team, game.away_team)}
+                            disabled={isPending}
+                            className="text-xs px-2 py-1 rounded bg-red-900/50 hover:bg-red-900 text-red-300 disabled:opacity-50"
+                          >
+                            Delete
+                          </button>
                         )}
                         {/* Void available at any time unless already void */}
                         {game.status !== 'void' && (

@@ -7,12 +7,12 @@
 // to LeaderboardClient which handles the interactive buttons and sorting.
 //
 // Data flow:
-//   1. Find every sport that has a season which has already started
-//   2. For each sport, pick the most recently started season as "current"
-//   3. Load all scored picks (picks with points_earned filled in) for those seasons
-//   4. Compute per-sport and combined "Overall" standings in TypeScript
-//   5. Cap at top 100; detect if the logged-in user is outside top 100
-//   6. Hand everything to <LeaderboardClient> as props
+//   1. For each sport, prefer the is_active season (same as /picks and leagues);
+//      if none, use the most recent season with starts_at <= today (offseason).
+//   2. Load all scored picks (picks with points_earned filled in) for those seasons
+//   3. Compute per-sport and combined "Overall" standings in TypeScript
+//   4. Cap at top 100; detect if the logged-in user is outside top 100
+//   5. Hand everything to <LeaderboardClient> as props
 
 // revalidate = 180 declares our preferred cache lifetime: re-run after 3 minutes.
 // In practice, reading the auth cookie forces dynamic rendering in Next.js 14 —
@@ -22,6 +22,7 @@
 export const revalidate = 180
 
 import { redirect } from 'next/navigation'
+import { unstable_noStore as noStore } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import LeaderboardClient from './LeaderboardClient'
 
@@ -37,8 +38,7 @@ export type StandingRow = {
   totalPoints:   number
   correctPicks:  number    // picks where points_earned > 0
   finishedPicks: number    // all scored picks (points_earned IS NOT NULL)
-  accuracy:      number    // 0–100, % of decisive picks (wins + losses) that were wins
-                           // pushes/voids (points_earned = 0) are excluded from this calculation
+  accuracy:      number    // 0–100, correct picks ÷ all finished picks (matches league leaderboard)
 }
 
 // One sport shown as a pill button
@@ -58,6 +58,8 @@ export type LeaderboardView = {
 // LeaderboardPage — the server component
 // -----------------------------------------------------------------------
 export default async function LeaderboardPage() {
+  noStore()
+
   const supabase = createClient()
 
   // ---- Auth check ----
@@ -70,14 +72,17 @@ export default async function LeaderboardPage() {
   const currentUserId = user.id
 
   // -----------------------------------------------------------------------
-  // Step 1: Find all seasons that have started (starts_at <= today).
+  // Step 1–2: Choose one season per sport for standings.
   //
-  // A season "belongs" on the leaderboard from its starts_at date until
-  // the next season for that sport begins. We use starts_at (not is_active)
-  // so the previous year's standings remain visible during the offseason.
+  // IMPORTANT: /picks and league pages use seasons where is_active = true.
+  // The leaderboard used to use only starts_at <= today (most recent start).
+  // If the active season's starts_at is still in the future (data quirk) or
+  // differs from that row, we were querying the wrong season — new weeks'
+  // games and points_earned never appeared on the global board while leagues
+  // looked correct.
   //
-  // We also fetch the sport details (name, slug) in the same query using
-  // Supabase's FK join syntax: sports(id, name, slug).
+  // Strategy: prefer is_active per sport (same as the rest of the app).
+  // Fallback: most recent season with starts_at <= now (offseason / legacy).
   // -----------------------------------------------------------------------
   const today = new Date().toISOString()
 
@@ -88,44 +93,64 @@ export default async function LeaderboardPage() {
   // workaround for this known PostgREST/Supabase limitation. The same pattern
   // is used throughout the codebase (e.g. leagues/[id]/page.tsx).
   type SeasonWithSport = {
-    id:       string
-    sport_id: string
-    sports:   SportOption | null
+    id:        string
+    sport_id:  string
+    starts_at: string
+    sports:    SportOption | null
   }
 
-  const { data: rawSeasons, error: seasonsError } = await supabase
+  const { data: activeRaw, error: activeErr } = await supabase
     .from('seasons')
     .select('id, sport_id, starts_at, sports(id, name, slug)')
-    .lte('starts_at', today)
-    .order('starts_at', { ascending: false }) // most recent first — used below to pick "current"
+    .eq('is_active', true)
 
-  if (seasonsError) {
-    console.error('[leaderboard] Failed to load seasons:', seasonsError.message)
+  if (activeErr) {
+    console.error('[leaderboard] Failed to load active seasons:', activeErr.message)
     return <LeaderboardError />
   }
 
-  const allStartedSeasons = (rawSeasons ?? []) as unknown as SeasonWithSport[]
-
-  // -----------------------------------------------------------------------
-  // Step 2: Deduplicate to one season per sport.
-  //
-  // Since we ordered by starts_at DESC, the first occurrence of each sport_id
-  // is the most recently started season — that's what we call "current."
-  // -----------------------------------------------------------------------
-  const seenSportIds = new Set<string>()
-  const currentSeasons: SeasonWithSport[] = []
-
-  for (const s of allStartedSeasons) {
-    if (s.sport_id && !seenSportIds.has(s.sport_id) && s.sports) {
-      seenSportIds.add(s.sport_id)
-      currentSeasons.push(s)
+  const activeSeasons = (activeRaw ?? []) as unknown as SeasonWithSport[]
+  const activeBySport = new Map<string, SeasonWithSport>()
+  for (const s of activeSeasons) {
+    if (!s.sport_id || !s.sports) continue
+    const existing = activeBySport.get(s.sport_id)
+    if (!existing || new Date(s.starts_at) > new Date(existing.starts_at)) {
+      activeBySport.set(s.sport_id, s)
     }
+  }
+
+  const { data: startedRaw, error: startedErr } = await supabase
+    .from('seasons')
+    .select('id, sport_id, starts_at, sports(id, name, slug)')
+    .lte('starts_at', today)
+    .order('starts_at', { ascending: false })
+
+  if (startedErr) {
+    console.error('[leaderboard] Failed to load started seasons:', startedErr.message)
+    return <LeaderboardError />
+  }
+
+  const allStartedSeasons = (startedRaw ?? []) as unknown as SeasonWithSport[]
+  const fallbackBySport = new Map<string, SeasonWithSport>()
+  for (const s of allStartedSeasons) {
+    if (!s.sport_id || !s.sports) continue
+    if (!fallbackBySport.has(s.sport_id)) fallbackBySport.set(s.sport_id, s)
+  }
+
+  const allSportIds = Array.from(
+    new Set([...Array.from(activeBySport.keys()), ...Array.from(fallbackBySport.keys())])
+  )
+  const currentSeasons: SeasonWithSport[] = []
+  for (const sportId of allSportIds) {
+    const chosen = activeBySport.get(sportId) ?? fallbackBySport.get(sportId)
+    if (chosen) currentSeasons.push(chosen)
   }
 
   // Build the ordered list of sport options (for the pill buttons)
   const sports: SportOption[] = currentSeasons
     .map(s => s.sports)
     .filter((s): s is SportOption => s !== null)
+    .sort((a, b) => a.name.localeCompare(b.name))
 
   // ---- Empty state: no seasons have started yet ----
   if (sports.length === 0) {
@@ -272,31 +297,26 @@ export default async function LeaderboardPage() {
     const statsById: Record<string, {
       totalPoints:   number
       correctPicks:  number  // picks where points_earned > 0
-      finishedPicks: number  // all scored picks (used for display)
-      decidedPicks:  number  // wins + losses only — pushes/voids (0 pts) excluded
+      finishedPicks: number  // all scored picks including push/void
     }> = {}
 
     for (const pick of picks) {
       if (!statsById[pick.user_id]) {
         statsById[pick.user_id] = {
-          totalPoints: 0, correctPicks: 0, finishedPicks: 0, decidedPicks: 0,
+          totalPoints: 0, correctPicks: 0, finishedPicks: 0,
         }
       }
       // points_earned is NUMERIC in the DB — convert to JS number with Number()
       const pts = Number(pick.points_earned ?? 0)
       statsById[pick.user_id].totalPoints   += pts
       statsById[pick.user_id].finishedPicks += 1
-
-      // Pushes/voids score exactly 0. Exclude them from decidedPicks so they
-      // don't drag down accuracy % the same way a wrong pick does.
-      if (pts !== 0) statsById[pick.user_id].decidedPicks += 1
-      if (pts > 0)   statsById[pick.user_id].correctPicks  += 1
+      if (pts > 0) statsById[pick.user_id].correctPicks += 1
     }
 
-    // Filter out users with zero or negative total points — all losses,
-    // no presence on the public leaderboard.
+    // Anyone with at least one scored pick appears (including negative totals
+    // from double-down losses). Only hide users who have no finished games yet.
     const sorted = Object.entries(statsById)
-      .filter(([, stats]) => stats.totalPoints > 0)
+      .filter(([, stats]) => stats.finishedPicks >= 1)
       .sort(([, a], [, b]) => b.totalPoints - a.totalPoints)
 
     // Assign tie-aware ranks: players with equal points share the same rank number
@@ -306,11 +326,11 @@ export default async function LeaderboardPage() {
         currentRank = i + 1
       }
 
-      // Accuracy = correct wins ÷ decisive picks (wins + losses).
-      // Pushes/voids are in finishedPicks but not decidedPicks, so they
-      // don't count for or against the player's accuracy percentage.
-      const accuracy = stats.decidedPicks > 0
-        ? Math.round((stats.correctPicks / stats.decidedPicks) * 100)
+      // Accuracy = correct wins ÷ all finished picks.
+      // Matches the league leaderboard formula — push/void games count as
+      // finished but not correct, so they lower accuracy like a wrong pick.
+      const accuracy = stats.finishedPicks > 0
+        ? Math.round((stats.correctPicks / stats.finishedPicks) * 100)
         : 0
 
       return {

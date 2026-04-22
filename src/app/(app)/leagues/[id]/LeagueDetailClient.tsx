@@ -10,8 +10,21 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import LeaderboardTab from './LeaderboardTab'
 import MembersTab from './MembersTab'
+
+// Dynamic import — Stream Chat's JS (~421 kB) is only downloaded and executed
+// when the user actually clicks the Chat tab. The league page loads fast by default.
+// ssr: false is required because Stream Chat uses browser-only APIs (WebSockets).
+const ChatTab = dynamic(() => import('./ChatTab'), {
+  loading: () => (
+    <div className="p-8 text-center text-zinc-500 text-sm animate-pulse">
+      Loading chat...
+    </div>
+  ),
+  ssr: false,
+})
 import type {
   LeagueMember,
   OverallStanding,
@@ -31,6 +44,7 @@ type Props = {
     sportName: string
   }
   currentUserId:      string
+  currentUsername:    string
   isOwner:            boolean
   members:            LeagueMember[]
   weeks:              LeagueWeek[]
@@ -41,7 +55,7 @@ type Props = {
   hasSeason:          boolean
 }
 
-type Tab = 'leaderboard' | 'members'
+type Tab = 'leaderboard' | 'members' | 'chat'
 
 // -----------------------------------------------------------------------
 // LeagueDetailClient
@@ -49,6 +63,7 @@ type Tab = 'leaderboard' | 'members'
 export default function LeagueDetailClient({
   league,
   currentUserId,
+  currentUsername,
   isOwner,
   members,
   weeks,
@@ -93,7 +108,7 @@ export default function LeagueDetailClient({
 
       {/* Tab bar */}
       <div className="flex px-5 gap-0 border-b border-zinc-800 mb-0">
-        {(['leaderboard', 'members'] as const).map(tab => (
+        {(['leaderboard', 'members', 'chat'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -133,6 +148,14 @@ export default function LeagueDetailClient({
             members={members}
             currentUserId={currentUserId}
             isOwner={isOwner}
+          />
+        )}
+
+        {activeTab === 'chat' && (
+          <ChatTab
+            leagueId={league.id}
+            currentUserId={currentUserId}
+            currentUsername={currentUsername}
           />
         )}
       </div>

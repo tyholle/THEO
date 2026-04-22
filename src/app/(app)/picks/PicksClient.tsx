@@ -174,20 +174,36 @@ export default function PicksClient({
     setPicks(prev => ({ ...prev, [gameId]: optimisticPick }))
     setPendingPicks(prev => new Set(Array.from(prev).concat(gameId)))
 
-    const { data, error } = await supabase
+    // Update by user + game (not row id) so we still find the row when the
+    // client is holding a temporary UUID from the optimistic first save.
+    // Only picked_team is written — never is_double_down or points_earned —
+    // so a stale client cannot wipe a double-down that still exists in the DB.
+    const { data: updatedRow, error: updateError } = await supabase
       .from('picks')
-      .upsert(
-        {
+      .update({ picked_team: pickedTeam })
+      .eq('user_id', userId)
+      .eq('game_id', gameId)
+      .select()
+      .maybeSingle()
+
+    let data = updatedRow as PickRow | null
+    let error = updateError
+
+    if (!updateError && !updatedRow) {
+      const ins = await supabase
+        .from('picks')
+        .insert({
           user_id: userId,
           game_id: gameId,
           week_id: weekId,
           picked_team: pickedTeam,
-          is_double_down: existing?.is_double_down ?? false,
-        },
-        { onConflict: 'user_id,game_id' }
-      )
-      .select()
-      .single()
+          is_double_down: false,
+        })
+        .select()
+        .single()
+      data = ins.data as PickRow | null
+      error = ins.error
+    }
 
     // Pick is no longer in-flight — remove from pending set
     setPendingPicks(prev => {

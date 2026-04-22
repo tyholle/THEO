@@ -44,6 +44,8 @@ export type GameRow = {
   away_short_name: string | null
   home_logo_url: string | null    // ESPN CDN logo image URL
   away_logo_url: string | null
+  home_team_color: string | null // ESPN primary color, 6 hex chars (e.g. "990000")
+  away_team_color: string | null
   spread: number                  // Always negative, e.g. -7.5
   spread_favors: 'home' | 'away'  // Which team that negative spread applies to
   point_value: number             // 1–10, admin-assigned
@@ -160,7 +162,7 @@ export default async function PicksPage({
   // ---- Fetch games for the selected week ----
   const { data: games, error: gamesError } = await supabase
     .from('games')
-    .select('id, week_id, home_team, away_team, home_short_name, away_short_name, home_logo_url, away_logo_url, spread, spread_favors, point_value, kickoff_at, home_score, away_score, status, ats_result')
+    .select('id, week_id, home_team, away_team, home_short_name, away_short_name, home_logo_url, away_logo_url, home_team_color, away_team_color, spread, spread_favors, point_value, kickoff_at, home_score, away_score, status, ats_result')
     .eq('week_id', selectedWeek.id)
     // Sort by point value descending (10-point game first, 1-point game last)
     // so the highest-stakes matchups always appear at the top.
@@ -170,20 +172,16 @@ export default async function PicksPage({
 
   if (gamesError) return <DatabaseErrorState />
 
-  // ---- Fetch picks by game ID, not week ID ----
-  // We fetch picks using the exact game IDs on this page rather than
-  // filtering by week_id. This is more reliable: the pick's week_id
-  // may differ from selectedWeek.id in some edge cases (e.g. set by a
-  // DB trigger), but the game_id relationship is always canonical.
-  const gameIds = (games ?? []).map(g => g.id)
-
-  const { data: picks, error: picksError } = gameIds.length > 0
-    ? await supabase
-        .from('picks')
-        .select('*')
-        .in('game_id', gameIds)
-        .eq('user_id', user.id)
-    : { data: [], error: null }
+  // ---- All picks in this week (by week_id) ----
+  // The pick’s `week_id` is set from the game row in the database (trigger), so
+  // it always matches the week. Loading this way (instead of only by the current
+  // page’s `game_id` list) keeps `is_double_down` correct after new games are
+  // added to the week, and keeps client state in sync for “one per week” logic.
+  const { data: picks, error: picksError } = await supabase
+    .from('picks')
+    .select('*')
+    .eq('week_id', selectedWeek.id)
+    .eq('user_id', user.id)
 
   if (picksError) return <DatabaseErrorState />
 

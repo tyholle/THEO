@@ -59,6 +59,9 @@ export type EspnGame = {
   awayShortName: string     // Short display name, e.g. "Alabama"
   homeLogoUrl: string | null  // ESPN CDN URL for the home team's logo image
   awayLogoUrl: string | null  // ESPN CDN URL for the away team's logo image
+  // Primary color as 6 hex digits (e.g. "990000") from ESPN; null if missing
+  homeTeamColor: string | null
+  awayTeamColor: string | null
   kickoffAt: string         // ISO 8601 timestamp, e.g. "2025-09-06T17:00:00Z"
   homeScore: number | null
   awayScore: number | null
@@ -97,6 +100,8 @@ interface EspnCompetitor {
     displayName: string
     // shortDisplayName is ESPN's condensed name, e.g. "Ohio State" vs "Ohio State Buckeyes"
     shortDisplayName?: string
+    // Primary team color, usually 6 hex chars without # (e.g. "990000")
+    color?: string
     // logos is an array of image objects; we grab the first one's URL
     logos?: Array<{ href: string; rel?: string[] }>
   }
@@ -137,6 +142,13 @@ function parseCompetition(eventId: string, eventDate: string, comp: EspnCompetit
     return (dark ?? logos[0]).href
   }
 
+  // ESPN sometimes includes "#" on color; we store 6 lowercase hex digits only.
+  function normalizeTeamColor(c: string | undefined): string | null {
+    if (!c) return null
+    const s = c.replace(/^#/, '').trim().toLowerCase()
+    return /^[0-9a-f]{6}$/.test(s) ? s : null
+  }
+
   return {
     espnGameId:    eventId,
     homeTeam:      home.team?.shortDisplayName ?? home.team?.displayName ?? '',
@@ -146,6 +158,8 @@ function parseCompetition(eventId: string, eventDate: string, comp: EspnCompetit
     awayShortName: away.team?.shortDisplayName ?? away.team?.displayName ?? '',
     homeLogoUrl:   pickLogo(home.team?.logos),
     awayLogoUrl:   pickLogo(away.team?.logos),
+    homeTeamColor: normalizeTeamColor(home.team?.color),
+    awayTeamColor: normalizeTeamColor(away.team?.color),
     kickoffAt:     eventDate,
     homeScore:     home.score != null ? Number(home.score) : null,
     awayScore:     away.score != null ? Number(away.score) : null,

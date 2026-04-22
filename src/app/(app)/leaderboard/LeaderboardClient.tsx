@@ -29,10 +29,8 @@ type SortKey = 'points' | 'accuracy'
 // LeaderboardClient
 // -----------------------------------------------------------------------
 export default function LeaderboardClient({ sports, views, currentUserId }: Props) {
-  // Which pill is active — default to the first sport (not Overall)
-  const [selectedSlug, setSelectedSlug] = useState<string>(
-    sports[0]?.slug ?? 'overall'
-  )
+  // Default to Overall so combined standings are visible immediately (multi-sport).
+  const [selectedSlug, setSelectedSlug] = useState<string>('overall')
 
   // Which column to sort by — default to points
   const [sortKey, setSortKey] = useState<SortKey>('points')
