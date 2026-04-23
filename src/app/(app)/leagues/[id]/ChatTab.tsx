@@ -24,10 +24,13 @@ import {
   Channel as StreamChannel,
   MessageComposer,
   MessageList,
+  WithComponents,
   Window,
 } from 'stream-chat-react'
 import 'stream-chat-react/dist/css/index.css'
 import { ensureStreamChannel } from '../actions'
+import NonFloatingDateSeparator from '@/components/chat/NonFloatingDateSeparator'
+import StableMessageActions from '@/components/chat/StableMessageActions'
 
 // -----------------------------------------------------------------------
 // Note on custom reactions (6 fixed emoji):
@@ -206,7 +209,12 @@ export default function ChatTab({ leagueId, currentUserId, currentUsername }: Pr
   return (
     // The outer div sets the THEO color overrides as CSS variables.
     // Stream reads these variables to style all of its child components.
-    <div style={STREAM_THEME_VARS} className="h-[calc(100vh-280px)] min-h-[400px]">
+    // h-full — fills the space provided by LeagueDetailClient's flex-1 container;
+    //   the parent now controls the height so we don't need a hardcoded calc() offset
+    // relative — establishes a positioning context so Stream's absolutely-positioned
+    //   overlays (message action menu, reaction picker) anchor within the chat area
+    // flex flex-col — propagates height down through Stream's child containers
+    <div style={STREAM_THEME_VARS} className="relative flex flex-col h-full">
       {/*
         Chat — provides the Stream client to everything below via React context.
         theme="str-chat__theme-dark" applies Stream's built-in dark mode class,
@@ -219,23 +227,35 @@ export default function ChatTab({ leagueId, currentUserId, currentUsername }: Pr
         */}
         <StreamChannel channel={channel}>
           {/*
-            Window — splits the view into the message list (scrollable area)
-            and the message input (pinned to the bottom).
+            Local Stream overrides:
+            - MessageActions: keeps menu anchored to the tapped message.
+            - DateSeparator: suppresses the floating duplicate date pill.
           */}
-          <Window>
+          <WithComponents
+            overrides={{
+              DateSeparator: NonFloatingDateSeparator,
+              MessageActions: StableMessageActions,
+            }}
+          >
             {/*
-              MessageList — renders all messages with avatars, timestamps,
-              reaction counts, and the reaction picker on hover/tap.
-              No custom props needed — Stream handles everything.
+              Window — splits the view into the message list (scrollable area)
+              and the message input (pinned to the bottom).
             */}
-            <MessageList />
+            <Window>
+              {/*
+                MessageList — renders all messages with avatars, timestamps,
+                reaction counts, and the reaction picker on hover/tap.
+                No custom props needed — Stream handles everything.
+              */}
+              <MessageList />
 
-            {/*
-              MessageComposer — the text box + send button at the bottom.
-              In stream-chat-react v14, MessageInput was renamed MessageComposer.
-            */}
-            <MessageComposer />
-          </Window>
+              {/*
+                MessageComposer — the text box + send button at the bottom.
+                In stream-chat-react v14, MessageInput was renamed MessageComposer.
+              */}
+              <MessageComposer />
+            </Window>
+          </WithComponents>
         </StreamChannel>
       </Chat>
     </div>

@@ -76,10 +76,14 @@ export default function LeagueDetailClient({
   const [activeTab, setActiveTab] = useState<Tab>('leaderboard')
 
   return (
-    <div className="min-h-screen bg-zinc-950 pb-24">
+    // When the Chat tab is active we switch the page from a normal scrollable
+    // layout to a fixed-height flex column. This lets CSS distribute the
+    // available space between the header and the chat area without needing
+    // to hard-code a calc() offset. Other tabs stay scrollable as normal.
+    <div className={`bg-zinc-950 ${activeTab === 'chat' ? 'h-full flex flex-col pb-16' : 'min-h-screen pb-24'}`}>
 
       {/* Back navigation */}
-      <div className="px-5 pt-12 pb-1">
+      <div className="px-5 pt-8 pb-1">
         <Link
           href="/leagues"
           className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors"
@@ -126,7 +130,9 @@ export default function LeagueDetailClient({
       </div>
 
       {/* Tab content */}
-      <div className="pt-4">
+      {/* flex-1 min-h-0 when chat is active: fills the remaining height after the
+          header so ChatTab can use h-full without guessing a pixel offset */}
+      <div className={`pt-4 ${activeTab === 'chat' ? 'flex-1 flex flex-col min-h-0' : ''}`}>
         {activeTab === 'leaderboard' && (
           <LeaderboardTab
             leagueId={league.id}

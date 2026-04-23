@@ -16,6 +16,39 @@ body {
   /* Font stack comes from RootLayout (DM Sans via Tailwind font-sans + --font-dm-sans). */
 }
 
+/* -----------------------------------------------------------------------
+   Stream Chat React — height cascade
+   Stream's CSS is lazy-loaded after globals.css, so Stream's own rules
+   win on specificity by default. !important on these three heights ensures
+   our fixed-height flex layout propagates all the way down to the Window
+   component so the message list scrolls internally and the input bar
+   stays pinned at the bottom of the chat container.
+   ----------------------------------------------------------------------- */
+.str-chat                { height: 100% !important; }
+.str-chat__channel       { height: 100% !important; }
+.str-chat__main-panel    { flex: 1 !important; min-height: 0 !important; }
+
+/* -----------------------------------------------------------------------
+   Stream Chat React — mobile chat polish
+   - Slightly reduce composer padding so input feels more compact (medium)
+   - Keep the composer flush above the fixed bottom nav without extra gap
+   ----------------------------------------------------------------------- */
+.str-chat {
+  --str-chat__message-composer-padding: var(--str-chat__spacing-xs);
+}
+.str-chat .str-chat__message-composer-controls {
+  padding: 6px;
+}
+
+/* Stream also renders a floating date pill while scrolling.
+   We hide that overlay so only one date separator is shown. */
+.str-chat__date-separator--floating {
+  display: none !important;
+}
+.str-chat .str-chat__date-separator.str-chat__date-separator--floating {
+  display: none !important;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;

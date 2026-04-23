@@ -100,6 +100,9 @@ interface EspnCompetitor {
     displayName: string
     // shortDisplayName is ESPN's condensed name, e.g. "Ohio State" vs "Ohio State Buckeyes"
     shortDisplayName?: string
+    // name is the nickname only, e.g. "Giants" — present in the summary endpoint
+    // where shortDisplayName is absent
+    name?: string
     // Primary team color, usually 6 hex chars without # (e.g. "990000")
     color?: string
     // logos is an array of image objects; we grab the first one's URL
@@ -151,11 +154,11 @@ function parseCompetition(eventId: string, eventDate: string, comp: EspnCompetit
 
   return {
     espnGameId:    eventId,
-    homeTeam:      home.team?.shortDisplayName ?? home.team?.displayName ?? '',
-    awayTeam:      away.team?.shortDisplayName ?? away.team?.displayName ?? '',
-    // Use shortDisplayName if ESPN provides it; fall back to the full name
-    homeShortName: home.team?.shortDisplayName ?? home.team?.displayName ?? '',
-    awayShortName: away.team?.shortDisplayName ?? away.team?.displayName ?? '',
+    homeTeam:      home.team?.shortDisplayName ?? home.team?.name ?? home.team?.displayName ?? '',
+    awayTeam:      away.team?.shortDisplayName ?? away.team?.name ?? away.team?.displayName ?? '',
+    // Fallback chain: shortDisplayName (scoreboard) → name (summary) → displayName (always present)
+    homeShortName: home.team?.shortDisplayName ?? home.team?.name ?? home.team?.displayName ?? '',
+    awayShortName: away.team?.shortDisplayName ?? away.team?.name ?? away.team?.displayName ?? '',
     homeLogoUrl:   pickLogo(home.team?.logos),
     awayLogoUrl:   pickLogo(away.team?.logos),
     homeTeamColor: normalizeTeamColor(home.team?.color),
