@@ -9,11 +9,9 @@ export default function AppShellLayout({
     // flex flex-col h-screen: fixes the app shell to exactly the viewport height.
     // AppHeader gets its natural height; the scrollable wrapper below it fills the rest.
     //
-    // Why this matters: the old "min-h-screen" approach let AppHeader + page content
-    // exceed 100vh, causing the browser to scroll the page. That broke Stream Chat's
-    // coordinate math (window.scrollY was non-zero, so position: fixed menus landed
-    // in the wrong spot). With this layout, window.scrollY is always 0 and Stream's
-    // menus appear correctly next to the messages.
+    // Pages scroll within the inner div rather than the browser viewport —
+    // this keeps window.scrollY at 0, which is important for any fixed-position
+    // UI elements (dropdowns, modals, etc.) that rely on viewport coordinates.
     <div className="flex flex-col h-screen bg-zinc-950 text-zinc-100">
       <AppHeader />
       {/* flex-1 overflow-y-auto: pages that need to scroll (picks, leaderboard, etc.)

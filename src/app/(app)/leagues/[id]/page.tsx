@@ -251,7 +251,6 @@ export default async function LeagueDetailPage({
         sportName,
       }}
       currentUserId={user.id}
-      currentUsername={myMembership.username}
       isOwner={isOwner}
       members={members}
       weeks={weeks}

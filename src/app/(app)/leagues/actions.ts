@@ -16,8 +16,6 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
-import { streamAdmin } from '@/lib/stream'
 
 // -----------------------------------------------------------------------
 // Join code character set
@@ -208,44 +206,12 @@ export async function previewLeague(joinCode: string) {
 // -----------------------------------------------------------------------
 export async function joinLeague(joinCode: string) {
   try {
-    const { supabase, userId } = await requireUser()
+    const { supabase } = await requireUser()
 
     const { error } = await supabase
       .rpc('join_group_by_code', { p_code: joinCode })
 
     if (error) return { error: error.message }
-
-    // ---- Stream: add the new member to the channel if it already exists ----
-    // The join_group_by_code RPC just committed, so the user is now a member
-    // and the RLS policy allows them to read this group row.
-    // If the channel hasn't been created yet (stream_channel_id is null),
-    // we skip this — they'll be included in the bulk add when the chat tab
-    // is opened for the first time (ensureStreamChannel adds all current members).
-    try {
-      const { data: group } = await supabase
-        .from('groups')
-        .select('id, stream_channel_id')
-        .eq('join_code', joinCode.trim().toUpperCase())
-        .maybeSingle()
-
-      if (group?.stream_channel_id) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('username')
-          .eq('id', userId)
-          .maybeSingle()
-
-        // Register the user in Stream so their username shows on messages
-        await streamAdmin.upsertUser({ id: userId, name: profile?.username ?? userId })
-
-        const channel = streamAdmin.channel('messaging', group.stream_channel_id)
-        await channel.addMembers([userId])
-      }
-    } catch {
-      // Non-fatal: the DB join succeeded. If Stream fails here, the user will
-      // be added to the channel the next time ensureStreamChannel runs.
-      console.warn('Stream member add failed on joinLeague — will retry on first chat open')
-    }
 
     revalidatePath('/leagues')
     return { success: true as const }
@@ -316,15 +282,6 @@ export async function leaveLeague(groupId: string) {
       return { error: 'Transfer the commissioner role to another member before leaving.' }
     }
 
-    // Read stream_channel_id BEFORE deleting the membership row.
-    // After deletion, RLS no longer lets this user see the group row,
-    // so we must capture the channel ID while we still have access.
-    const { data: group } = await supabase
-      .from('groups')
-      .select('stream_channel_id')
-      .eq('id', groupId)
-      .maybeSingle()
-
     const { error } = await supabase
       .from('group_members')
       .delete()
@@ -332,17 +289,6 @@ export async function leaveLeague(groupId: string) {
       .eq('user_id', userId)
 
     if (error) return { error: error.message }
-
-    // ---- Stream: remove the user from the channel immediately ----
-    // Non-fatal: the DB leave always commits regardless of Stream's result.
-    if (group?.stream_channel_id) {
-      try {
-        const channel = streamAdmin.channel('messaging', group.stream_channel_id)
-        await channel.removeMembers([userId])
-      } catch {
-        console.warn('Stream member remove failed on leaveLeague')
-      }
-    }
 
     revalidatePath('/leagues')
     return { success: true as const }
@@ -377,16 +323,6 @@ export async function removeMember(groupId: string, targetUserId: string) {
       return { error: 'You cannot remove yourself. Transfer commissioner first, then leave.' }
     }
 
-    // Read stream_channel_id before the delete — the commissioner is still a
-    // member so they can read the group row. (After the delete, the target
-    // user would lose access, but the caller still has it — we just capture
-    // it up front for clarity and consistency with leaveLeague.)
-    const { data: group } = await supabase
-      .from('groups')
-      .select('stream_channel_id')
-      .eq('id', groupId)
-      .maybeSingle()
-
     const { error } = await supabase
       .from('group_members')
       .delete()
@@ -394,16 +330,6 @@ export async function removeMember(groupId: string, targetUserId: string) {
       .eq('user_id', targetUserId)
 
     if (error) return { error: error.message }
-
-    // ---- Stream: remove the kicked member from the channel immediately ----
-    if (group?.stream_channel_id) {
-      try {
-        const channel = streamAdmin.channel('messaging', group.stream_channel_id)
-        await channel.removeMembers([targetUserId])
-      } catch {
-        console.warn('Stream member remove failed on removeMember')
-      }
-    }
 
     revalidatePath(`/leagues/${groupId}`)
     return { success: true as const }
@@ -482,106 +408,6 @@ export async function transferCommissioner(groupId: string, targetUserId: string
 // The RLS policy now checks group_members for the owner role, so a
 // transferred commissioner can use this action correctly.
 // -----------------------------------------------------------------------
-// -----------------------------------------------------------------------
-// ensureStreamChannel
-// Called by the Chat tab when it first opens for a league.
-//
-// If the league already has a Stream channel (stream_channel_id is set),
-// this returns it immediately — no work needed.
-//
-// If this is the first time the Chat tab has been opened for this league,
-// we create the Stream channel here ("lazy creation"). All current members
-// are added at this point so everyone can see the full message history
-// regardless of when they first opened the tab.
-//
-// The channel ID is saved to the groups table so future calls are instant.
-// -----------------------------------------------------------------------
-export async function ensureStreamChannel(groupId: string) {
-  try {
-    const { supabase, userId } = await requireUser()
-
-    // Verify the caller is actually a member of this league
-    const { data: membership } = await supabase
-      .from('group_members')
-      .select('role')
-      .eq('group_id', groupId)
-      .eq('user_id', userId)
-      .maybeSingle()
-
-    if (!membership) return { error: 'You are not a member of this league.' }
-
-    // Check if the Stream channel already exists for this league
-    const { data: group } = await supabase
-      .from('groups')
-      .select('stream_channel_id, name')
-      .eq('id', groupId)
-      .maybeSingle()
-
-    if (!group) return { error: 'League not found.' }
-
-    // Channel already exists — return the ID immediately (fast path)
-    if (group.stream_channel_id) {
-      return { success: true as const, channelId: group.stream_channel_id }
-    }
-
-    // ---- Lazy creation: first time anyone opens Chat for this league ----
-
-    // Fetch all current members so we can add them all to the channel at once.
-    // This is crucial: if we only added the user who triggered creation, earlier
-    // members would miss all messages sent before they "opened the tab".
-    const { data: rawMembers } = await supabase
-      .from('group_members')
-      .select('user_id, profiles(username)')
-      .eq('group_id', groupId)
-
-    const members = (rawMembers ?? []).map(m => ({
-      id:   m.user_id,
-      name: (m.profiles as unknown as { username: string } | null)?.username ?? m.user_id,
-    }))
-
-    // Register all members in Stream with their THEO usernames.
-    // upsertUsers() creates them if they don't exist, updates if they do.
-    if (members.length > 0) {
-      await streamAdmin.upsertUsers(members)
-    }
-
-    // Create the Stream channel.
-    // We use the league's database UUID as the channel ID — this means the
-    // channel ID is always the same as the league ID, so we never lose track of it.
-    // Channel type 'messaging' is Stream's standard DM/group chat type.
-    const channelId = groupId
-    // Cast to Record<string, unknown> because Stream's TypeScript types don't
-    // declare 'name' in their ChannelData shape, even though the API accepts it.
-    const channel = streamAdmin.channel('messaging', channelId, {
-      name:           group.name,
-      members:        members.map(m => m.id),
-      created_by_id:  userId,
-    } as Record<string, unknown>)
-    await channel.create()
-
-    // Save the channel ID to the database so future calls return immediately.
-    // We use the service-role admin client here because the groups UPDATE RLS
-    // policy only allows owners and admins to update groups. A regular member
-    // who opens Chat first would be silently blocked by RLS if we used the
-    // normal user client. Membership has already been verified above, so this
-    // privileged write is safe.
-    const { error: updateError } = await createAdminClient()
-      .from('groups')
-      .update({ stream_channel_id: channelId })
-      .eq('id', groupId)
-
-    if (updateError) {
-      console.error('[ensureStreamChannel] Failed to persist stream_channel_id:', updateError.message)
-      return { error: 'Chat channel created but could not be saved. Please try again.' }
-    }
-
-    return { success: true as const, channelId }
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Unknown error' }
-  }
-}
-
-
 export async function editLeagueName(groupId: string, newName: string) {
   try {
     const { supabase, userId } = await requireUser()

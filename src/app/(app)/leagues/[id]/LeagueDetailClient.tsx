@@ -10,21 +10,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import dynamic from 'next/dynamic'
 import LeaderboardTab from './LeaderboardTab'
 import MembersTab from './MembersTab'
-
-// Dynamic import — Stream Chat's JS (~421 kB) is only downloaded and executed
-// when the user actually clicks the Chat tab. The league page loads fast by default.
-// ssr: false is required because Stream Chat uses browser-only APIs (WebSockets).
-const ChatTab = dynamic(() => import('./ChatTab'), {
-  loading: () => (
-    <div className="p-8 text-center text-zinc-500 text-sm animate-pulse">
-      Loading chat...
-    </div>
-  ),
-  ssr: false,
-})
 import type {
   LeagueMember,
   OverallStanding,
@@ -44,7 +31,6 @@ type Props = {
     sportName: string
   }
   currentUserId:      string
-  currentUsername:    string
   isOwner:            boolean
   members:            LeagueMember[]
   weeks:              LeagueWeek[]
@@ -55,7 +41,7 @@ type Props = {
   hasSeason:          boolean
 }
 
-type Tab = 'leaderboard' | 'members' | 'chat'
+type Tab = 'leaderboard' | 'members'
 
 // -----------------------------------------------------------------------
 // LeagueDetailClient
@@ -63,7 +49,6 @@ type Tab = 'leaderboard' | 'members' | 'chat'
 export default function LeagueDetailClient({
   league,
   currentUserId,
-  currentUsername,
   isOwner,
   members,
   weeks,
@@ -76,11 +61,7 @@ export default function LeagueDetailClient({
   const [activeTab, setActiveTab] = useState<Tab>('leaderboard')
 
   return (
-    // When the Chat tab is active we switch the page from a normal scrollable
-    // layout to a fixed-height flex column. This lets CSS distribute the
-    // available space between the header and the chat area without needing
-    // to hard-code a calc() offset. Other tabs stay scrollable as normal.
-    <div className={`bg-zinc-950 ${activeTab === 'chat' ? 'h-full flex flex-col pb-16' : 'min-h-screen pb-24'}`}>
+    <div className="bg-zinc-950 min-h-screen pb-24">
 
       {/* Back navigation */}
       <div className="px-5 pt-8 pb-1">
@@ -112,7 +93,7 @@ export default function LeagueDetailClient({
 
       {/* Tab bar */}
       <div className="flex px-5 gap-0 border-b border-zinc-800 mb-0">
-        {(['leaderboard', 'members', 'chat'] as const).map(tab => (
+        {(['leaderboard', 'members'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -130,9 +111,7 @@ export default function LeagueDetailClient({
       </div>
 
       {/* Tab content */}
-      {/* flex-1 min-h-0 when chat is active: fills the remaining height after the
-          header so ChatTab can use h-full without guessing a pixel offset */}
-      <div className={`pt-4 ${activeTab === 'chat' ? 'flex-1 flex flex-col min-h-0' : ''}`}>
+      <div className="pt-4">
         {activeTab === 'leaderboard' && (
           <LeaderboardTab
             leagueId={league.id}
@@ -157,13 +136,6 @@ export default function LeagueDetailClient({
           />
         )}
 
-        {activeTab === 'chat' && (
-          <ChatTab
-            leagueId={league.id}
-            currentUserId={currentUserId}
-            currentUsername={currentUsername}
-          />
-        )}
       </div>
     </div>
   )
